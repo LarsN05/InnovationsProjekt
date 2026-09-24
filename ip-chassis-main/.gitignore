@@ -1,0 +1,15 @@
+# ignore any macos files
+.DS_Store
+
+# generated metrics summary (scripts/build_metrics.py)
+scripts/metrics-summary.txt
+
+# ignore python files
+__pycache__/
+#venv
+*.pyc
+*.pyo
+*.pyd
+env/
+venv/
+.venv/
