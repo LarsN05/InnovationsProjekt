@@ -155,6 +155,7 @@ void drivingLoop(PIDController &pid, QTRSensors &qtr, Motor &motorL, Motor &moto
                 motorR.brake();
                 delay(1000);
             }
+
             if(checkpointCounter == turnCheckpoint){
                 motorL.brake();
                 motorR.brake();
@@ -168,10 +169,19 @@ void drivingLoop(PIDController &pid, QTRSensors &qtr, Motor &motorL, Motor &moto
                 pid.prevError = 0;
                 delay(200);
             }
+
             if(checkpointCounter == finalCheckpoint){
                 motorL.brake();
                 motorR.brake();
                 robotMotionEnabled = false;
+            }
+
+            if(checkpointCounter == dcCheckpoint){
+                
+            }
+
+            if(checkpointCounter == servoCheckpoint){
+
             }
             break;
         default:

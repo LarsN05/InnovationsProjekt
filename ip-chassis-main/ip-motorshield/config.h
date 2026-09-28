@@ -37,8 +37,11 @@ constexpr float motorIsenseVoltsPerAmp = 2.0475f;
 // uncovered phase gap of about 27 degrees, providing good coverage.
 constexpr uint16_t motorCurrentAdcSamples = 15;
 
+//checkpoints
 constexpr int finalCheckpoint = 12;
 constexpr int turnCheckpoint = 7;
+constexpr int servoCheckpoint = 4;
+constexpr int dcCheckpoint = 2;
 
 
 #define BLACKLINE_THRESHOLD 300 // Minimum threshold for the center sensor to consider the robot to be centered on. Note that this value depends on supply voltage (ca. 300 for 3V3 and ca. 550 for 5V) and the reflectivity of the surface. If the calibration does not finish, try to lower this threshold.
