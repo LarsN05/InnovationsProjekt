@@ -3,6 +3,9 @@
 #include "shared-globals.h"
 #include <Arduino.h>
 #include "movement-functions.h"
+#include "src/motorshield/motorshield.h"
+
+extern Motorshield shield;
 
 float calculatePIDstep(PIDController &pid, float measurement, float executionFrequency)
 {
@@ -177,10 +180,25 @@ void drivingLoop(PIDController &pid, QTRSensors &qtr, Motor &motorL, Motor &moto
             }
 
             if(checkpointCounter == dcCheckpoint){
-                
+                motorL.brake();
+                motorR.brake();
+                shield.motor(3).setSpeed(3000);
+                delay(2000);
+                shield.motor(3).stop();
             }
 
             if(checkpointCounter == servoCheckpoint){
+                shield.servo(1).setAngleRange(180);
+                motorL.brake();
+                motorR.brake();
+                shield.servo(1).setAngle(0);
+                delay(2000);
+                shield.servo(1).setAngle(180);
+                delay(2000);
+                shield.servo(1).setAngle(0);
+                delay(2000);
+                shield.servo(1).setAngle(180);
+                delay(2000);
 
             }
             break;

@@ -5,7 +5,7 @@
 #include "config.h"
 
 constexpr uint32_t minTurnTimeMs = 400; //ensures a minimal turn of atleast 120°
-constexpr uint32_t turnTimeOutMs = 1000; //constant for the maximum time a turn should be attempted for
+constexpr uint32_t turnTimeOutMs = 5000; //constant for the maximum time a turn should be attempted for
 
 bool perform180Turn(QTRSensors &qtr, Motor &motorL, Motor &motorR){
     turnLeft(motorL, motorR);
@@ -30,7 +30,7 @@ bool perform180Turn(QTRSensors &qtr, Motor &motorL, Motor &motorR){
     motorL.brake();
     motorR.brake();
 
-    bool turnSuccess = millis() - startOfTurn < 1000;
+    bool turnSuccess = millis() - startOfTurn < turnTimeOutMs;
 
     if(!turnSuccess){
       Serial.println("180-turn error");
