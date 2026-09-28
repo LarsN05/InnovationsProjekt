@@ -2,6 +2,7 @@
 #include "config.h"
 #include "shared-globals.h"
 #include <Arduino.h>
+#include "movement-functions.h"
 
 float calculatePIDstep(PIDController &pid, float measurement, float executionFrequency)
 {
@@ -153,6 +154,24 @@ void drivingLoop(PIDController &pid, QTRSensors &qtr, Motor &motorL, Motor &moto
                 motorL.brake();
                 motorR.brake();
                 delay(1000);
+            }
+            if(checkpointCounter == turnCheckpoint){
+                motorL.brake();
+                motorR.brake();
+                delay(200);
+                if(!perform180Turn(qtr, motorL, motorR)){
+                    robotMotionEnabled = false;
+                    blinkWarningPattern(255, 0, 0, 10);
+                }
+                //resetting the line following errors to ensure a clean start after the turn
+                pid.integral = 0;
+                pid.prevError = 0;
+                delay(200);
+            }
+            if(checkpointCounter == finalCheckpoint){
+                motorL.brake();
+                motorR.brake();
+                robotMotionEnabled = false;
             }
             break;
         default:
