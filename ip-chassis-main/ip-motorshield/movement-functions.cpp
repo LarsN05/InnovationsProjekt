@@ -27,6 +27,30 @@ bool perform180Turn(QTRSensors &qtr, Motor &motorL, Motor &motorR){
       qtr.readLineBlack(sensorValues);
     }
 
+    //ensure that the sensor is centered on the line
+    /*while((sensorValues[3] > BLACKLINE_THRESHOLD || sensorValues[1] > BLACKLINE_THRESHOLD) && millis() - startOfTurn < turnTimeOutMs){
+      if(sensorValues[1] > BLACKLINE_THRESHOLD){
+        motorL.brake();
+        motorR.brake();
+        turnLeft(motorL, motorR);
+        while(sensorValues[1] > BLACKLINE_THRESHOLD){
+          delay(10);
+          qtr.readLineBlack(sensorValues);
+        }
+      }
+      if(sensorValues[3] > BLACKLINE_THRESHOLD){
+        motorL.brake();
+        motorR.brake();
+        turnRight(motorL, motorR);
+        while(sensorValues[3] > BLACKLINE_THRESHOLD){
+          delay(10);
+          qtr.readLineBlack(sensorValues);
+        }
+      }
+      delay(10);
+      qtr.readLineBlack(sensorValues);
+    }*/
+
     motorL.brake();
     motorR.brake();
 
@@ -35,6 +59,6 @@ bool perform180Turn(QTRSensors &qtr, Motor &motorL, Motor &motorR){
     if(!turnSuccess){
       Serial.println("180-turn error");
     }
-
+    
     return turnSuccess;
 }
