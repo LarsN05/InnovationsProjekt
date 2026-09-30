@@ -4,8 +4,11 @@
 #include "onboard-led.h"
 #include "config.h"
 
-constexpr uint32_t minTurnTimeMs = 400; //ensures a minimal turn of atleast 120°
+constexpr uint32_t minTurnTimeMs = 400; //should ensure a minimal turn of atleast 120°
 constexpr uint32_t turnTimeOutMs = 5000; //constant for the maximum time a turn should be attempted for
+constexpr uint32_t allignementMs = 500; //constant for the allignement reversal time
+constexpr uint16_t reversalSpeed = 200; //speed for reversal
+constexpr uint32_t allignementTimeOutMs = 3000; // timout for reversal in allignOnCheckpoint
 
 bool perform180Turn(QTRSensors &qtr, Motor &motorL, Motor &motorR){
     turnLeft(motorL, motorR);
@@ -61,4 +64,40 @@ bool perform180Turn(QTRSensors &qtr, Motor &motorL, Motor &motorR){
     }
     
     return turnSuccess;
+}
+
+bool allignOnCheckpoint(PIDController &pid, QTRSensors &qtr, Motor &motorL, Motor &motorR){
+  
+  uint16_t sensorValues[QTR_SENSOR_COUNT];
+  uint32_t startMs = millis();
+  uint32_t periodMs = 1000/driveLoopHzTarget;
+
+  //follow the line for a short time to ensure proper allignement
+  while(millis() - startMs < allignementMs){
+    int position = qtr.readLineBlack(qtrSensorValues);
+    float signal = calculatePIDstep(pid, position, driveLoopHzTarget);
+    setMotorSpeeds(signal, motorL, motorR);
+    delay(periodMs);
+  }
+  motorL.setSpeed(-reversalSpeed);
+  motorR.setSpeed(-reversalSpeed);
+  qtr.readLineBlack(sensorValues);
+  
+  //reverse until line is detected again
+  while(sensorValues[0] < BLACKLINE_THRESHOLD && millis() - startMs < allignementTimeOutMs){
+      delay(10);
+      qtr.readLineBlack(sensorValues);
+  }
+  
+  motorL.brake();
+  motorR.brake();
+
+
+  bool allignementSuccess = millis() - startMs < allignementTimeOutMs;
+  
+  if(!allignementSuccess){
+    Serial.println("allignement error");
+  }
+
+  return allignementSuccess;
 }

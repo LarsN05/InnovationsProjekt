@@ -6,3 +6,4 @@
 #include "config.h"
 
 bool perform180Turn(QTRSensors &qtr, Motor &motorL, Motor &motorR);
+bool allignOnCheckpoint(PIDController &pid, QTRSensors &qtr, Motor &motorL, Motor &motorR);
