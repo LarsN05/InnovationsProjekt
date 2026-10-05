@@ -7,7 +7,7 @@
 constexpr uint32_t minTurnTimeMs = 400; //should ensure a minimal turn of atleast 120°
 constexpr uint32_t turnTimeOutMs = 5000; //constant for the maximum time a turn should be attempted for
 constexpr uint32_t allignementMs = 500; //constant for the allignement reversal time
-constexpr uint16_t reversalSpeed = 200; //speed for reversal
+constexpr uint16_t reversalSpeed = 600; //speed for reversal
 constexpr uint32_t allignementTimeOutMs = 3000; // timout for reversal in allignOnCheckpoint
 
 bool perform180Turn(QTRSensors &qtr, Motor &motorL, Motor &motorR){
@@ -35,7 +35,7 @@ bool perform180Turn(QTRSensors &qtr, Motor &motorL, Motor &motorR){
       if(sensorValues[1] > BLACKLINE_THRESHOLD){
         motorL.brake();
         motorR.brake();
-        turnLeft(motorL, motorR);
+        turnRight(motorL, motorR);
         while(sensorValues[1] > BLACKLINE_THRESHOLD){
           delay(10);
           qtr.readLineBlack(sensorValues);
@@ -44,7 +44,7 @@ bool perform180Turn(QTRSensors &qtr, Motor &motorL, Motor &motorR){
       if(sensorValues[3] > BLACKLINE_THRESHOLD){
         motorL.brake();
         motorR.brake();
-        turnRight(motorL, motorR);
+        turnLeft(motorL, motorR);
         while(sensorValues[3] > BLACKLINE_THRESHOLD){
           delay(10);
           qtr.readLineBlack(sensorValues);
@@ -79,6 +79,8 @@ bool allignOnCheckpoint(PIDController &pid, QTRSensors &qtr, Motor &motorL, Moto
     setMotorSpeeds(signal, motorL, motorR);
     delay(periodMs);
   }
+  motorL.brake();
+  motorR.brake();
   motorL.setSpeed(-reversalSpeed);
   motorR.setSpeed(-reversalSpeed);
   qtr.readLineBlack(sensorValues);

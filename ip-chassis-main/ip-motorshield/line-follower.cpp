@@ -174,32 +174,29 @@ void drivingLoop(PIDController &pid, QTRSensors &qtr, Motor &motorL, Motor &moto
             }
 
             if(checkpointCounter == finalCheckpoint){
+                allignOnCheckpoint(pid, qtr, motorL, motorR);
                 motorL.brake();
                 motorR.brake();
                 robotMotionEnabled = false;
             }
 
             if(checkpointCounter == dcCheckpoint){
-                motorL.brake();
+                /*motorL.brake();
                 motorR.brake();
                 shield.motor(3).setSpeed(3000);
                 delay(2000);
-                shield.motor(3).stop();
+                shield.motor(3).stop();*/
             }
 
             if(checkpointCounter == servoCheckpoint){
-                shield.servo(1).setAngleRange(180);
+                /*shield.servo(1).setAngleRange(180);
                 motorL.brake();
                 motorR.brake();
                 shield.servo(1).setAngle(0);
                 delay(2000);
                 shield.servo(1).setAngle(180);
                 delay(2000);
-                shield.servo(1).setAngle(0);
-                delay(2000);
-                shield.servo(1).setAngle(180);
-                delay(2000);
-
+                shield.servo(1).setAngle(0);*/
             }
             break;
         default:

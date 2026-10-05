@@ -3,7 +3,7 @@
 
 // Set to 1 to enable the WiFi web interface for live telemetry and remote control.
 // Set to 0 for standalone mode: the robot auto-starts after calibration with no WiFi.
-#define ENABLE_WEB_INTERFACE 1
+#define ENABLE_WEB_INTERFACE 0
 
 constexpr char accessPointNamePrefix[] = "IP-Motorshield";  // The WiFi SSID will be this prefix followed by the last 3 bytes of the MAC address, e.g. "IP-Motorshield-1A2B3C".
 constexpr char accessPointTeamName[] = "H09";  // Insert team name here, e.g. "TeamA"
