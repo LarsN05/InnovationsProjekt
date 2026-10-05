@@ -38,6 +38,7 @@ constexpr float motorIsenseVoltsPerAmp = 2.0475f;
 constexpr uint16_t motorCurrentAdcSamples = 15;
 
 //checkpoints
+constexpr int distributionCenter = 1;
 constexpr int finalCheckpoint = 13;
 constexpr int turnCheckpoint = 7;
 constexpr int servoCheckpoint = 10;
