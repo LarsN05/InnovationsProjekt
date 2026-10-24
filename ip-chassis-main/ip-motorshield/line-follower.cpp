@@ -2,10 +2,7 @@
 #include "config.h"
 #include "shared-globals.h"
 #include <Arduino.h>
-#include "movement-functions.h"
-#include "src/motorshield/motorshield.h"
-
-extern Motorshield shield;
+#include "robot-control.h"
 
 float calculatePIDstep(PIDController &pid, float measurement, float executionFrequency)
 {
@@ -103,6 +100,11 @@ static int compensateDeadzoneWithFlip(int speedCommand)
 
 void setMotorSpeeds(int signal, Motor &motorL, Motor &motorR)
 {
+    if (hardwareSettings.invertSteering)
+    {
+        signal = -signal;
+    }
+
     leftMotorSpeed = constrain(defaultMotorSpeed + signal, -PWM_MAX_VALUE, PWM_MAX_VALUE);
     rightMotorSpeed = constrain(defaultMotorSpeed - signal, -PWM_MAX_VALUE, PWM_MAX_VALUE);
 
@@ -118,15 +120,23 @@ void setMotorSpeeds(int signal, Motor &motorL, Motor &motorR)
 
 void drivingLoop(PIDController &pid, QTRSensors &qtr, Motor &motorL, Motor &motorR)
 {
-    int position = qtr.readLineBlack(qtrSensorValues);
+    linePosition = qtr.readLineBlack(qtrSensorValues);
     updateLineStatus();
+
+    if (robotMode == RobotMode::Manual)
+    {
+        // Motors are driven from the web interface; only keep the sensor readings fresh.
+        controlSignal = 0.0f;
+        oldLineStatus = lineStatus;
+        return;
+    }
 
     if (!robotMotionEnabled)
     {
         controlSignal = 0.0f;
         leftMotorSpeed = 0;
         rightMotorSpeed = 0;
-        if (brakeWhenStopped)
+        if (brakeWhenStopped || robotMode == RobotMode::Paused)
         {
             motorL.brake();
             motorR.brake();
@@ -140,67 +150,18 @@ void drivingLoop(PIDController &pid, QTRSensors &qtr, Motor &motorL, Motor &moto
         return;
     }
 
-    controlSignal = calculatePIDstep(pid, position, driveLoopHzTarget);
+    controlSignal = calculatePIDstep(pid, linePosition, driveLoopHzTarget);
     setMotorSpeeds(controlSignal, motorL, motorR);
 
     if (lineStatus != oldLineStatus)
     {
-        switch (lineStatus)
+        if (lineStatus == STOP)
         {
-            // TODO for students: Implement your own cases needed to complete the required tasks your roboter has to complete during the run
-        case STOP:
             checkpointCounter++;
             lastCheckpointTimeMs = millis();
-
-            if (stopAtCheckpoints)
-            {
-                motorL.brake();
-                motorR.brake();
-                delay(1000);
-            }
-
-            if(checkpointCounter == turnCheckpoint){
-                motorL.brake();
-                motorR.brake();
-                delay(200);
-                if(!perform180Turn(qtr, motorL, motorR)){
-                    robotMotionEnabled = false;
-                    blinkWarningPattern(255, 0, 0, 10);
-                }
-                //resetting the line following errors to ensure a clean start after the turn
-                pid.integral = 0;
-                pid.prevError = 0;
-                delay(200);
-            }
-
-            if(checkpointCounter == finalCheckpoint){
-                allignOnCheckpoint(pid, qtr, motorL, motorR);
-                motorL.brake();
-                motorR.brake();
-                robotMotionEnabled = false;
-            }
-
-            if(checkpointCounter == dcCheckpoint){
-                /*motorL.brake();
-                motorR.brake();
-                shield.motor(3).setSpeed(3000);
-                delay(2000);
-                shield.motor(3).stop();*/
-            }
-
-            if(checkpointCounter == servoCheckpoint){
-                /*shield.servo(1).setAngleRange(180);
-                motorL.brake();
-                motorR.brake();
-                shield.servo(1).setAngle(0);
-                delay(2000);
-                shield.servo(1).setAngle(180);
-                delay(2000);
-                shield.servo(1).setAngle(0);*/
-            }
-            break;
-        default:
-            break;
+            // What happens at each checkpoint is defined by the mission (see robot-control.cpp),
+            // which can be edited live from the web interface.
+            handleCheckpoint(pid, qtr, motorL, motorR);
         }
         oldLineStatus = lineStatus;
     }

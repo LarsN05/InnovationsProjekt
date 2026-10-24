@@ -3,7 +3,7 @@
 
 // Set to 1 to enable the WiFi web interface for live telemetry and remote control.
 // Set to 0 for standalone mode: the robot auto-starts after calibration with no WiFi.
-#define ENABLE_WEB_INTERFACE 0
+#define ENABLE_WEB_INTERFACE 1
 
 constexpr char accessPointNamePrefix[] = "IP-Motorshield";  // The WiFi SSID will be this prefix followed by the last 3 bytes of the MAC address, e.g. "IP-Motorshield-1A2B3C".
 constexpr char accessPointTeamName[] = "H09";  // Insert team name here, e.g. "TeamA"
@@ -43,6 +43,19 @@ constexpr int finalCheckpoint = 13;
 constexpr int turnCheckpoint = 7;
 constexpr int servoCheckpoint = 10;
 constexpr int dcCheckpoint = 12;
+
+// Lever arm servo, controllable from the web interface.
+constexpr uint8_t leverArmServo = 1; // servo header 1..8 on the motorshield
+constexpr float leverArmAngleRangeDeg = 180.0f; // mechanical travel of the lever arm servo
+constexpr int leverArmRestDeg = 0;    // position at power-up and for the "Rest" button
+constexpr int leverArmActiveDeg = 180; // position for the "Active" button
+
+// Drive hardware defaults. All of these can be changed at runtime in the web
+// interface (Diagnostics tab) and saved to flash, so you rarely need to edit them here.
+constexpr bool defaultInvertLeftMotor = false;  // left wheel turns backwards when it should go forward
+constexpr bool defaultInvertRightMotor = false; // right wheel turns backwards when it should go forward
+constexpr bool defaultSwapMotors = false;       // left/right motor cables are on M2/M1 instead of M1/M2
+constexpr bool defaultInvertSteering = false;   // robot steers away from the line instead of towards it
 
 
 #define BLACKLINE_THRESHOLD 300 // Minimum threshold for the center sensor to consider the robot to be centered on. Note that this value depends on supply voltage (ca. 300 for 3V3 and ca. 550 for 5V) and the reflectivity of the surface. If the calibration does not finish, try to lower this threshold.

@@ -2,6 +2,7 @@
 
 #include "config.h"
 #include "onboard-led.h"
+#include "robot-control.h"
 #include "shared-globals.h"
 #include "web-page.h"
 
@@ -75,6 +76,14 @@ struct __attribute__((packed)) TelemetryBin
     float driveLoopExecUs_measured;
     float telemetryHz_measured;
     float telemetryExecUs_peak;
+
+    int32_t linePosition;
+    int32_t leverAngleDeg;
+    uint8_t robotMode;
+    uint8_t lineStatus;
+    uint8_t stopAtNextCheckpoint;
+    uint8_t reserved;
+
     uint32_t timestamp_ms;
 };
 
@@ -173,7 +182,7 @@ static inline TelemetryBin makeTelemetryBin()
 {
     TelemetryBin telemetry{};
     telemetry.magic = 0x314D4C54;
-    telemetry.version = 3;
+    telemetry.version = 4;
     telemetry.total_len = sizeof(TelemetryBin);
 
     telemetry.qtr0 = qtrSensorValues[0];
@@ -207,6 +216,11 @@ static inline TelemetryBin makeTelemetryBin()
     telemetry.driveLoopExecUs_measured = driveLoopExecUsMeasured;
     telemetry.telemetryHz_measured = telemetryHzMeasured;
     telemetry.telemetryExecUs_peak = telemetryExecUsPeak;
+    telemetry.linePosition = linePosition;
+    telemetry.leverAngleDeg = leverArmAngleDeg;
+    telemetry.robotMode = static_cast<uint8_t>(robotMode);
+    telemetry.lineStatus = static_cast<uint8_t>(lineStatus);
+    telemetry.stopAtNextCheckpoint = stopAtNextCheckpoint ? 1 : 0;
     telemetry.timestamp_ms = millis();
 
     return telemetry;
@@ -300,26 +314,241 @@ void applyParamsFromCsv(const char *payload)
                   enableSupplyAndM1M2CurrentMonitoring ? 1 : 0);
 }
 
+void fillLeverArmMessage(char *buffer, size_t bufferSize)
+{
+    snprintf(buffer, bufferSize, "lever=%d,%d,%d,%d",
+             leverArmAngleDeg,
+             static_cast<int>(leverArmAngleRangeDeg),
+             leverArmRestDeg,
+             leverArmActiveDeg);
+}
+
+void fillHardwareMessage(char *buffer, size_t bufferSize)
+{
+    snprintf(buffer, bufferSize, "hw=%d,%d,%d,%d",
+             hardwareSettings.invertLeftMotor ? 1 : 0,
+             hardwareSettings.invertRightMotor ? 1 : 0,
+             hardwareSettings.swapMotors ? 1 : 0,
+             hardwareSettings.invertSteering ? 1 : 0);
+}
+
+void fillMissionMessage(char *buffer, size_t bufferSize)
+{
+    CheckpointStep steps[maxMissionSteps];
+    const uint8_t count = getMission(steps);
+    size_t used = snprintf(buffer, bufferSize, "mission=");
+    for (uint8_t i = 0; i < count && used < bufferSize; ++i)
+    {
+        used += snprintf(buffer + used, bufferSize - used, "%s%u:%d",
+                         i == 0 ? "" : ",",
+                         static_cast<unsigned>(steps[i].action),
+                         steps[i].param);
+    }
+}
+
+// Sends every piece of robot state that is not part of the binary telemetry.
+void sendStateToClient(uint8_t clientNum)
+{
+    char message[320];
+    fillParamsMessage(message, sizeof(message));
+    webSocketServer.sendTXT(clientNum, message);
+    fillLeverArmMessage(message, sizeof(message));
+    webSocketServer.sendTXT(clientNum, message);
+    fillHardwareMessage(message, sizeof(message));
+    webSocketServer.sendTXT(clientNum, message);
+    fillMissionMessage(message, sizeof(message));
+    webSocketServer.sendTXT(clientNum, message);
+}
+
+template <typename Fill>
+void broadcastMessage(Fill fill)
+{
+    char message[320];
+    fill(message, sizeof(message));
+    webSocketServer.broadcastTXT(message);
+}
+
+void sendStatus(uint8_t clientNum, const char *status)
+{
+    char message[96];
+    snprintf(message, sizeof(message), "status=%s", status);
+    webSocketServer.sendTXT(clientNum, message);
+}
+
+void applyMissionFromText(const char *payload, uint8_t clientNum)
+{
+    CheckpointStep steps[maxMissionSteps];
+    uint8_t count = 0;
+    const char *cursor = payload + 8; // after "mission="
+    while (*cursor != '\0' && count < maxMissionSteps)
+    {
+        unsigned action = 0;
+        int param = 0;
+        int consumed = 0;
+        if (sscanf(cursor, "%u:%d%n", &action, &param, &consumed) != 2 || action >= static_cast<unsigned>(CheckpointAction::Count))
+        {
+            sendStatus(clientNum, "error: invalid mission");
+            return;
+        }
+        steps[count++] = {static_cast<CheckpointAction>(action), static_cast<int16_t>(constrain(param, -32768, 32767))};
+        cursor += consumed;
+        if (*cursor == ',')
+        {
+            ++cursor;
+        }
+    }
+    setMission(steps, count);
+    broadcastMessage(fillMissionMessage);
+    Serial.printf("Mission updated (%u checkpoints)\n", static_cast<unsigned>(count));
+}
+
+void applyHardwareFromText(const char *payload, uint8_t clientNum)
+{
+    int invL = 0, invR = 0, swap = 0, invS = 0;
+    if (sscanf(payload, "hw=%d,%d,%d,%d", &invL, &invR, &swap, &invS) != 4)
+    {
+        sendStatus(clientNum, "error: invalid hardware settings");
+        return;
+    }
+    if (robotMode != RobotMode::Idle)
+    {
+        sendStatus(clientNum, "error: stop the robot before changing hardware settings");
+        broadcastMessage(fillHardwareMessage);
+        return;
+    }
+    hardwareSettings.invertLeftMotor = invL != 0;
+    hardwareSettings.invertRightMotor = invR != 0;
+    hardwareSettings.swapMotors = swap != 0;
+    hardwareSettings.invertSteering = invS != 0;
+    applyHardwareSettings();
+    broadcastMessage(fillHardwareMessage);
+}
+
+void applyManualFromText(const char *payload)
+{
+    int left = 0, right = 0;
+    if (sscanf(payload, "manual=%d,%d", &left, &right) == 2)
+    {
+        postRobotRequest(RobotRequestType::Manual, left, right);
+    }
+}
+
+void postOrReport(uint8_t clientNum, RobotRequestType type, const char *status, int a = 0)
+{
+    if (postRobotRequest(type, a))
+    {
+        webSocketServer.broadcastTXT(status);
+    }
+    else
+    {
+        sendStatus(clientNum, "error: robot busy, command dropped");
+    }
+}
+
+bool commandIs(const char *payload, const char *command)
+{
+    return strcmp(payload + 8, command) == 0; // payload starts with "command="
+}
+
 void applyWebCommand(const char *payload, uint8_t clientNum)
 {
-    if (strncmp(payload, "command=start", 13) == 0)
+    if (commandIs(payload, "start"))
     {
-        robotMotionEnabled = true;
-        webSocketServer.sendTXT(clientNum, "status=moving");
-        return;
+        postOrReport(clientNum, RobotRequestType::Start, "status=moving");
     }
-
-    if (strncmp(payload, "command=stop", 12) == 0)
+    else if (commandIs(payload, "stop"))
     {
-        robotMotionEnabled = false;
-        webSocketServer.sendTXT(clientNum, "status=stopped");
-        return;
+        postOrReport(clientNum, RobotRequestType::Stop, "status=stopped");
     }
-
-    if (strncmp(payload, "command=get_params", 18) == 0)
+    else if (commandIs(payload, "next_stop"))
     {
-        sendParamsToClient(clientNum);
-        return;
+        postOrReport(clientNum, RobotRequestType::NextStop, "status=driving to next stop");
+    }
+    else if (commandIs(payload, "calibrate"))
+    {
+        postOrReport(clientNum, RobotRequestType::Calibrate, "status=calibrating");
+    }
+    else if (commandIs(payload, "turn180"))
+    {
+        postOrReport(clientNum, RobotRequestType::Turn180, "status=turning 180");
+    }
+    else if (commandIs(payload, "align"))
+    {
+        postOrReport(clientNum, RobotRequestType::Align, "status=aligning on checkpoint");
+    }
+    else if (strncmp(payload, "command=checkpoint=", 19) == 0)
+    {
+        postOrReport(clientNum, RobotRequestType::SetCheckpoint, "status=checkpoint counter set", atoi(payload + 19));
+    }
+    else if (strncmp(payload, "command=lever=", 14) == 0)
+    {
+        const int angleDeg = constrain(atoi(payload + 14), 0, static_cast<int>(leverArmAngleRangeDeg));
+        leverArmAngleDeg = angleDeg; // reported immediately, applied by the drive task
+        postRobotRequest(RobotRequestType::Lever, angleDeg);
+        broadcastMessage(fillLeverArmMessage);
+    }
+    else if (commandIs(payload, "lever_release"))
+    {
+        leverArmAngleDeg = -1;
+        postRobotRequest(RobotRequestType::Lever, -1);
+        broadcastMessage(fillLeverArmMessage);
+    }
+    else if (commandIs(payload, "mission_default"))
+    {
+        resetMissionToDefault();
+        broadcastMessage(fillMissionMessage);
+    }
+    else if (commandIs(payload, "save"))
+    {
+        sendStatus(clientNum, saveSettings() ? "settings saved to flash" : "error: saving settings failed");
+    }
+    else if (commandIs(payload, "factory_reset"))
+    {
+        clearSavedSettings();
+        sendStatus(clientNum, "saved settings cleared, restarting");
+        delay(200);
+        ESP.restart();
+    }
+    else if (commandIs(payload, "get_params"))
+    {
+        sendStateToClient(clientNum);
+    }
+}
+
+void broadcastRobotEvents()
+{
+    RobotEventType type;
+    int arg = 0;
+    while (popRobotEvent(type, arg))
+    {
+        const char *name = "unknown";
+        switch (type)
+        {
+        case RobotEventType::ArrivedAtStop:
+            name = "arrived";
+            break;
+        case RobotEventType::Checkpoint:
+            name = "checkpoint";
+            break;
+        case RobotEventType::Finished:
+            name = "finished";
+            break;
+        case RobotEventType::TurnFailed:
+            name = "turn_failed";
+            break;
+        case RobotEventType::AlignFailed:
+            name = "align_failed";
+            break;
+        case RobotEventType::CalibrationDone:
+            name = "calibrated";
+            break;
+        case RobotEventType::ManualTimeout:
+            name = "manual_timeout";
+            break;
+        }
+        char message[48];
+        snprintf(message, sizeof(message), "event=%s,%d", name, arg);
+        webSocketServer.broadcastTXT(message);
     }
 }
 
@@ -343,32 +572,47 @@ void onWebSocketEvent(uint8_t clientNum, WStype_t type, uint8_t *payload, size_t
         Serial.printf("WebSocket client disconnected: #%u (active: %u)\n",
                       static_cast<unsigned>(clientNum),
                       static_cast<unsigned>(websocketClientCount));
+        if (robotMode == RobotMode::Manual)
+        {
+            postRobotRequest(RobotRequestType::Stop);
+        }
         break;
     case WStype_TEXT:
+    {
         if (payload == nullptr || length == 0)
         {
             return;
         }
-        if (strncmp(reinterpret_cast<const char *>(payload), "params=", 7) == 0)
+        char text[320];
+        const size_t copyLength = min(length, sizeof(text) - 1);
+        memcpy(text, payload, copyLength);
+        text[copyLength] = '\0';
+
+        if (strncmp(text, "manual=", 7) == 0)
         {
-            char text[160];
-            const size_t copyLength = min(length, sizeof(text) - 1);
-            memcpy(text, payload, copyLength);
-            text[copyLength] = '\0';
+            applyManualFromText(text);
+        }
+        else if (strncmp(text, "params=", 7) == 0)
+        {
             Serial.print("Received params message: ");
             Serial.println(text);
             applyParamsFromCsv(text);
             broadcastParams();
         }
-        else if (strncmp(reinterpret_cast<const char *>(payload), "command=", 8) == 0)
+        else if (strncmp(text, "mission=", 8) == 0)
         {
-            char text[64];
-            const size_t copyLength = min(length, sizeof(text) - 1);
-            memcpy(text, payload, copyLength);
-            text[copyLength] = '\0';
+            applyMissionFromText(text, clientNum);
+        }
+        else if (strncmp(text, "hw=", 3) == 0)
+        {
+            applyHardwareFromText(text, clientNum);
+        }
+        else if (strncmp(text, "command=", 8) == 0)
+        {
             applyWebCommand(text, clientNum);
         }
         break;
+    }
     default:
         break;
     }
@@ -469,6 +713,8 @@ uint32_t updateWebInterface()
     const uint32_t startedAtUs = micros();
     webServer.handleClient();
     webSocketServer.loop();
+
+    broadcastRobotEvents();
 
     const int currentApStationCount = WiFi.softAPgetStationNum();
     if (currentApStationCount != lastApStationCount)

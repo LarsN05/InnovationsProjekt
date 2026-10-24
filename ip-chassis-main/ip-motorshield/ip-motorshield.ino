@@ -8,6 +8,7 @@
 #include "qtr-sensor-util.h"
 #include "line-follower.h"
 #include "shared-globals.h"
+#include "robot-control.h"
 #if ENABLE_WEB_INTERFACE
 #include "web-interface.h"
 #endif
@@ -73,6 +74,9 @@ void setup()
 
   maybeBlinkForBatteryLowVoltageWarning();
 
+  initRobotControl(shield);
+  loadSettings(pid);
+
 #if ENABLE_WEB_INTERFACE
   initWebInterface(pid, &shield);
   xTaskCreatePinnedToCore(webInterfaceTask, "webInterface", 8192, nullptr, 1, nullptr, 0);
@@ -89,12 +93,12 @@ void setup()
   setOnboardLedColor(0, 0, 255);
   delay(200);
 
-  calibrateSensors(qtr, shield.motor(1), shield.motor(2));
+  calibrateSensors(qtr, leftMotor(), rightMotor());
 
 #if !ENABLE_WEB_INTERFACE
   setOnboardLedColor(0, 200, 200); // solid cyan: auto-start countdown
   delay(3000);
-  robotMotionEnabled = true;
+  postRobotRequest(RobotRequestType::Start);
   setHeartbeatStandaloneActive();
 #endif
 
@@ -104,6 +108,7 @@ void setup()
 void loop()
 {
   blinkPeriodically();
+  updateRobotControl(pid, qtr);
 
   static uint32_t lastDriveTime = 0;
   static uint32_t driveLoopCounter = 0;
@@ -112,7 +117,7 @@ void loop()
   {
     lastDriveTime = micros();
     const uint32_t startedAtUs = micros();
-    drivingLoop(pid, qtr, shield.motor(1), shield.motor(2));
+    drivingLoop(pid, qtr, leftMotor(), rightMotor());
     driveLoopExecUsMeasured = static_cast<float>(micros() - startedAtUs);
 
     ++driveLoopCounter;

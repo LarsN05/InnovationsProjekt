@@ -24,6 +24,8 @@ public:
 
     void setSpeed(int speedSigned);
     void setDecayMode(DecayMode mode) { _decayMode = mode; }
+    // Flips the direction of every speed command, e.g. for a motor wired with reversed polarity.
+    void setInverted(bool inverted) { _inverted = inverted; }
     void stop();  // both inputs low -> outputs Hi-Z, motor coasts
     void brake(); // both inputs high -> motor windings shorted, active brake
     int speed() const { return _speed; }
@@ -42,6 +44,7 @@ protected:
 
 private:
     DecayMode _decayMode = DecayMode::Brake;
+    bool _inverted = false;
     int _speed = 0;
     Ads1015 *_senseAdc = nullptr;
     uint8_t _senseChannel = 0;
