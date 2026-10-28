@@ -7,6 +7,7 @@ void Motor::setSpeed(int speedSigned)
 {
     _speed = constrain(speedSigned, -kMaxSpeed, kMaxSpeed);
     uint16_t duty = abs(_speed);
+    const bool forward = (_speed > 0) != _inverted;
 
     if (_speed == 0)
     {
@@ -16,7 +17,7 @@ void Motor::setSpeed(int speedSigned)
     {
         // Slow decay: active input held high, other input carries inverted duty,
         // so the off-time shorts the windings (both inputs high = brake).
-        if (_speed > 0)
+        if (forward)
         {
             writePins(kMaxSpeed, kMaxSpeed - duty);
         }
@@ -29,7 +30,7 @@ void Motor::setSpeed(int speedSigned)
     {
         // Fast decay: active input carries the duty, other input held low,
         // so the off-time leaves the outputs Hi-Z (both inputs low = coast).
-        if (_speed > 0)
+        if (forward)
         {
             writePins(duty, 0);
         }

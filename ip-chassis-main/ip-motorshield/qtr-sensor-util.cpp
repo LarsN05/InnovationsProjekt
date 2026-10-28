@@ -49,25 +49,29 @@ void calibrateSensors(QTRSensors &qtr, Motor &motorL, Motor &motorR)
 {
     bool isNextTurnLeft = true;
     int16_t nTurns = 4;
-    int16_t iterPerTurn = 40;
-    int16_t halfTurn = iterPerTurn / 2;
-    int16_t totalIterations = (nTurns * iterPerTurn) + halfTurn;
-    for (int16_t i = 0; i < totalIterations; i++)
+    // Each sweep lasts a fixed time: qtr.calibrate() is much faster on a bright surface,
+    // so counting iterations made the sweeps too short to cross the line.
+    const uint32_t sweepMs = 600;
+    for (int16_t turn = 0; turn <= nTurns; turn++)
     {
-        if (i == 0 || (i - halfTurn) % iterPerTurn == 0)
+        if (isNextTurnLeft)
         {
-            if (isNextTurnLeft)
-            {
-                turnLeft(motorL, motorR);
-                isNextTurnLeft = false;
-            }
-            else
-            {
-                turnRight(motorL, motorR);
-                isNextTurnLeft = true;
-            }
+            turnLeft(motorL, motorR);
+            isNextTurnLeft = false;
         }
-        qtr.calibrate();
+        else
+        {
+            turnRight(motorL, motorR);
+            isNextTurnLeft = true;
+        }
+
+        // first sweep is half as long, so the robot oscillates around its start position
+        const uint32_t durationMs = (turn == 0) ? sweepMs / 2 : sweepMs;
+        const uint32_t sweepStartMs = millis();
+        while (millis() - sweepStartMs < durationMs)
+        {
+            qtr.calibrate();
+        }
     }
     uint32_t startOfReturnMove = millis();
     if (isNextTurnLeft)

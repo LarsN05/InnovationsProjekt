@@ -35,6 +35,10 @@
 #define MOTOR_6_A_CHANNEL (0)
 #define MOTOR_6_B_CHANNEL (1)
 
+// --- TT motor encoder (uses the free SPI pins) ---
+#define ENCODER_A_PIN (10) // red
+#define ENCODER_B_PIN (11) // white
+
 // --- Servo control via PCA9685 (I2C address 0x40) ---
 #define PCA9685_SERVO_I2C_ADDR (0x40)
 

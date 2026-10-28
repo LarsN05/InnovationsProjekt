@@ -159,6 +159,33 @@ void drivingLoop(PIDController &pid, QTRSensors &qtr, Motor &motorL, Motor &moto
                 delay(1000);
             }
 
+            if(checkpointCounter == distributionCenter){
+                motorL.brake();
+                motorR.brake();
+                //servo ansteuern
+                shield.servo(8).setAngleRange(270);
+                shield.servo(8).setAngle(135);
+                delay(500);
+                motorL.setSpeed(800);
+                motorR.setSpeed(800);
+                delay(200);
+                motorL.brake();
+                motorR.brake();
+                shield.servo(8).setAngle(270);
+                delay(1000);
+                shield.motor(5).setSpeed(-800);    // kurzer Schub zum Losbrechen
+                encodedMotorDelay(100);
+                shield.motor(5).setSpeed(-420);    // langsam weiterdrehen, ca. 15-20 rpm
+                encodedMotorDelay(4000);          // so lange drehen
+                shield.motor(5).stop();
+                encodedMotorDelay(20000);
+
+                //stay here: line following stops, the encoder motor can still be set in the web interface
+                motorL.brake();
+                motorR.brake();
+                robotMotionEnabled = false;
+            }
+
             if(checkpointCounter == turnCheckpoint){
                 motorL.brake();
                 motorR.brake();

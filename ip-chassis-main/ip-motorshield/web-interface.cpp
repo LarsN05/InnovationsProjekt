@@ -4,6 +4,7 @@
 #include "onboard-led.h"
 #include "shared-globals.h"
 #include "web-page.h"
+#include "movement-functions.h"
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -76,6 +77,10 @@ struct __attribute__((packed)) TelemetryBin
     float telemetryHz_measured;
     float telemetryExecUs_peak;
     uint32_t timestamp_ms;
+
+    float encoderTargetRpm;
+    float encoderRpm;
+    int32_t encoderTicks;
 };
 
 void buildAccessPointSsid()
@@ -173,7 +178,7 @@ static inline TelemetryBin makeTelemetryBin()
 {
     TelemetryBin telemetry{};
     telemetry.magic = 0x314D4C54;
-    telemetry.version = 3;
+    telemetry.version = 4;
     telemetry.total_len = sizeof(TelemetryBin);
 
     telemetry.qtr0 = qtrSensorValues[0];
@@ -208,6 +213,10 @@ static inline TelemetryBin makeTelemetryBin()
     telemetry.telemetryHz_measured = telemetryHzMeasured;
     telemetry.telemetryExecUs_peak = telemetryExecUsPeak;
     telemetry.timestamp_ms = millis();
+
+    telemetry.encoderTargetRpm = encodedMotorTargetRpmValue();
+    telemetry.encoderRpm = encodedMotorRpm();
+    telemetry.encoderTicks = encodedMotorTicks();
 
     return telemetry;
 }
@@ -319,6 +328,14 @@ void applyWebCommand(const char *payload, uint8_t clientNum)
     if (strncmp(payload, "command=get_params", 18) == 0)
     {
         sendParamsToClient(clientNum);
+        return;
+    }
+
+    int rpm = 0;
+    if (sscanf(payload, "command=encoder_rpm=%d", &rpm) == 1)
+    {
+        adjustSpeed(rpm);
+        Serial.printf("Encoder motor target: %d rpm\n", rpm);
         return;
     }
 }

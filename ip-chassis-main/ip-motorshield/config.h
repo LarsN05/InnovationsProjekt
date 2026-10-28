@@ -3,7 +3,11 @@
 
 // Set to 1 to enable the WiFi web interface for live telemetry and remote control.
 // Set to 0 for standalone mode: the robot auto-starts after calibration with no WiFi.
-#define ENABLE_WEB_INTERFACE 0
+#define ENABLE_WEB_INTERFACE 1
+
+// Set to 1 to test the encoder motor: skips the sensor calibration and the line following,
+// the robot does not drive. Set the motor rpm live in the web interface ("Encoder motor test").
+#define ENCODER_MOTOR_TEST_MODE 0
 
 constexpr char accessPointNamePrefix[] = "IP-Motorshield";  // The WiFi SSID will be this prefix followed by the last 3 bytes of the MAC address, e.g. "IP-Motorshield-1A2B3C".
 constexpr char accessPointTeamName[] = "H09";  // Insert team name here, e.g. "TeamA"
@@ -36,6 +40,23 @@ constexpr float motorIsenseVoltsPerAmp = 2.0475f;
 // non-harmonic rates distribute samples across the waveform with a maximum
 // uncovered phase gap of about 27 degrees, providing good coverage.
 constexpr uint16_t motorCurrentAdcSamples = 15;
+
+// TT motor with encoder (see movement-functions.cpp)
+constexpr uint8_t encodedMotorNumber = 6;        // motor port on the shield (M6)
+constexpr int encodedMotorMaxDuty = 2600;        // ca. 7.6 V at 12 V battery, TT motor is rated 3-6 V
+constexpr float encoderTicksPerRev = 288.0f;     // ticks per output shaft revolution (rising edges of A), measured by turning the wheel by hand
+constexpr int encodedMotorMaxRpm = 170;          // datasheet: 155 rpm +-5% at the wheel axle, higher targets are clipped
+constexpr int encoderDirection = 1;             // set to -1 if the measured rpm is negative while the target is positive (motor runs away)
+constexpr uint32_t encoderUpdatePeriodMs = 20;   // speed controller runs at 50 Hz
+// Speed controller: duty = feedforward (start duty + duty per rpm) + P + I
+// Feedforward measured from the log: running needs ca. 400 duty at 15 rpm and 550 duty at 35 rpm
+constexpr int encoderStartDuty = 300;            // duty offset of the feedforward (friction)
+constexpr float encoderFeedforward = 7.0f;       // duty per rpm on top of encoderStartDuty
+constexpr int encoderBreakawayDuty = 750;        // minimum duty while the motor stands still: a stalled motor needs more to start than to keep running
+constexpr int encodedMotorMinRpm = 20;           // below this the motor sticks and slips, smaller targets (except 0) are raised to this
+constexpr float encoderSpeedKp = 2.0f;           // duty per rpm error: reacts immediately to load; lower if it jitters
+constexpr float encoderSpeedKi = 10.0f;          // duty per rpm error and second: removes the remaining error; lower if it oscillates
+constexpr uint8_t encoderRpmWindow = 5;          // rpm is measured over this many updates (5 x 20 ms = 100 ms); larger = smoother but slower
 
 //checkpoints
 constexpr int distributionCenter = 1;

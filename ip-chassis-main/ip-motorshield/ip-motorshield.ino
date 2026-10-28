@@ -8,6 +8,7 @@
 #include "qtr-sensor-util.h"
 #include "line-follower.h"
 #include "shared-globals.h"
+#include "movement-functions.h"
 #if ENABLE_WEB_INTERFACE
 #include "web-interface.h"
 #endif
@@ -16,6 +17,12 @@ Motorshield shield;
 Mcp23017 &mcp = shield.gpio();
 QTRSensors qtr;
 PIDController pid(pidControlKp, pidControlKi, pidControlKd, (float)(QTR_LINE_MAX_VALUE / 2));
+
+// Drive motor ports: swap these two numbers if the robot steers away from the line
+constexpr uint8_t driveMotorLeft = 1;
+constexpr uint8_t driveMotorRight = 2;
+// Set to true if the robot drives backwards (sensor bar trailing) instead of forwards
+constexpr bool invertDriveMotors = false;
 
 constexpr float batteryWarn40PercentV = 13.1f;
 constexpr float batteryWarn20PercentV = 12.9f;
@@ -71,7 +78,13 @@ void setup()
     blinkWarningPattern(128, 0, 255, 8);  // violet: 8 blinks for motor shield init failure
   }
 
+  initEncodedMotor();
+  shield.motor(driveMotorLeft).setInverted(invertDriveMotors);
+  shield.motor(driveMotorRight).setInverted(invertDriveMotors);
+
   maybeBlinkForBatteryLowVoltageWarning();
+  
+
 
 #if ENABLE_WEB_INTERFACE
   initWebInterface(pid, &shield);
@@ -89,9 +102,13 @@ void setup()
   setOnboardLedColor(0, 0, 255);
   delay(200);
 
-  calibrateSensors(qtr, shield.motor(1), shield.motor(2));
+#if ENCODER_MOTOR_TEST_MODE
+  Serial.println("Encoder motor test mode: no calibration, no line following.");
+#else
+  calibrateSensors(qtr, shield.motor(driveMotorLeft), shield.motor(driveMotorRight));
+#endif
 
-#if !ENABLE_WEB_INTERFACE
+#if !ENABLE_WEB_INTERFACE && !ENCODER_MOTOR_TEST_MODE
   setOnboardLedColor(0, 200, 200); // solid cyan: auto-start countdown
   delay(3000);
   robotMotionEnabled = true;
@@ -104,6 +121,21 @@ void setup()
 void loop()
 {
   blinkPeriodically();
+  updateEncodedMotor();
+
+#if ENCODER_MOTOR_TEST_MODE
+  
+  printEncodedMotorDebug(); // controller state every 200 ms on Serial
+
+  // Raw QTR values every 500 ms: move a black line under the sensors, the values must rise clearly
+  static uint32_t lastQtrPrintMs = 0;
+  if (millis() - lastQtrPrintMs >= 500)
+  {
+    lastQtrPrintMs = millis();
+    printSensorValues(qtr);
+  }
+  return; // drive motors stay off, only the encoder motor runs
+#endif
 
   static uint32_t lastDriveTime = 0;
   static uint32_t driveLoopCounter = 0;
@@ -112,7 +144,7 @@ void loop()
   {
     lastDriveTime = micros();
     const uint32_t startedAtUs = micros();
-    drivingLoop(pid, qtr, shield.motor(1), shield.motor(2));
+    drivingLoop(pid, qtr, shield.motor(driveMotorLeft), shield.motor(driveMotorRight));
     driveLoopExecUsMeasured = static_cast<float>(micros() - startedAtUs);
 
     ++driveLoopCounter;

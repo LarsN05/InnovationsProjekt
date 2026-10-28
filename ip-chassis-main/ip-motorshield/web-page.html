@@ -310,6 +310,20 @@
         </div>
 
         <div class="box">
+          <div style="font-weight:700; margin-bottom:6px;">Encoder motor test</div>
+          <div class="params">
+            <label for="encoderRpmSlider">Target rpm: <span id="encoderRpmLabel">0</span></label>
+            <input id="encoderRpmSlider" type="range" min="-170" max="170" step="5" value="0" oninput="onEncoderSlider()">
+            <div class="row">
+              <input id="encoderRpmInput" type="number" step="1" value="0">
+              <button onclick="sendEncoderRpm(Number($('encoderRpmInput').value) || 0)">Set</button>
+              <button class="btn-danger" onclick="sendEncoderRpm(0)">Stop</button>
+            </div>
+            <div class="small">Target: <b id="encoderTargetOut">-</b> rpm &nbsp; Measured: <b id="encoderRpmOut">-</b> rpm &nbsp; Ticks: <b id="encoderTicksOut">-</b></div>
+          </div>
+        </div>
+
+        <div class="box">
           <div style="font-weight:700; margin-bottom:6px;">PID and Settings</div>
           <div class="params">
             <label for="pVal">P</label>
@@ -547,6 +561,30 @@
       addMsg(`Sent command=${command}`);
     }
 
+    let encoderSliderTimer = null;
+
+    function sendEncoderRpm(rpm) {
+      if (!isOpen()) {
+        addMsg('Not connected.');
+        return;
+      }
+      rpm = Math.round(rpm);
+      ws.send(`command=encoder_rpm=${rpm}`);
+      $('encoderRpmSlider').value = rpm;
+      $('encoderRpmInput').value = rpm;
+      $('encoderRpmLabel').textContent = String(rpm);
+    }
+
+    // Sends the slider value live while dragging, at most every 100 ms.
+    function onEncoderSlider() {
+      $('encoderRpmLabel').textContent = $('encoderRpmSlider').value;
+      if (encoderSliderTimer) return;
+      encoderSliderTimer = setTimeout(() => {
+        encoderSliderTimer = null;
+        sendEncoderRpm(Number($('encoderRpmSlider').value));
+      }, 100);
+    }
+
     function restoreDefaults() {
       $('pVal').value = 0.32;
       $('iVal').value = 0.4;
@@ -631,7 +669,7 @@
       const magic = readU32(view, off); off += 4;
       const version = readU16(view, off); off += 2;
       const totalLen = readU16(view, off); off += 2;
-      if (magic !== 0x314D4C54 || version !== 3 || totalLen !== buffer.byteLength) return null;
+      if (magic !== 0x314D4C54 || version !== 4 || totalLen !== buffer.byteLength) return null;
 
       const qtrs = [
         readU16(view, off + 0),
@@ -671,8 +709,15 @@
 
       const timestamp = readU32(view, off); off += 4;
 
+      const encoderTargetRpm = readF32(view, off); off += 4;
+      const encoderRpm = readF32(view, off); off += 4;
+      const encoderTicks = readI32(view, off); off += 4;
+
       return {
         timestamp,
+        encoderTargetRpm,
+        encoderRpm,
+        encoderTicks,
         qtrs,
         sensorError,
         leftSpeed,
@@ -756,6 +801,10 @@
       $('driveLoopExecMeasuredOut').textContent = Number(t.driveLoopExecUsMeasured).toFixed(1);
       $('telemetryHzMeasuredOut').textContent = Number(t.telemetryHzMeasured).toFixed(2);
       $('telemetryExecUsPeakOut').textContent = Number(t.telemetryExecUsPeak).toFixed(1);
+
+      $('encoderTargetOut').textContent = Number(t.encoderTargetRpm).toFixed(0);
+      $('encoderRpmOut').textContent = Number(t.encoderRpm).toFixed(1);
+      $('encoderTicksOut').textContent = String(t.encoderTicks);
 
       pushTelemetryRow(t);
 
