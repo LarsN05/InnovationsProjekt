@@ -163,30 +163,31 @@ void drivingLoop(PIDController &pid, QTRSensors &qtr, Motor &motorL, Motor &moto
                 motorL.brake();
                 motorR.brake();
                 //servo ansteuern
-                shield.servo(8).setAngleRange(270);
-                shield.servo(8).setAngle(135);
+                motorL.setSpeed(-800);
+                motorR.setSpeed(-800);
+                delay(500);
+                motorL.brake();
+                motorR.brake();
+                shield.servo(1).setAngleRange(270);
+                shield.servo(1).setAngle(0);
                 delay(500);
                 motorL.setSpeed(800);
                 motorR.setSpeed(800);
-                delay(200);
+                delay(900);
                 motorL.brake();
                 motorR.brake();
-                shield.servo(8).setAngle(270);
+                delay(500);
+                motorL.setSpeed(-800);
+                motorR.setSpeed(-800);
+                delay(600);
+                motorL.brake();
+                motorR.brake();
+                shield.servo(1).setAngle(150);
                 delay(1000);
-                shield.motor(5).setSpeed(-800);    // kurzer Schub zum Losbrechen
-                encodedMotorDelay(100);
-                shield.motor(5).setSpeed(-420);    // langsam weiterdrehen, ca. 15-20 rpm
-                encodedMotorDelay(4000);          // so lange drehen
-                shield.motor(5).stop();
-                encodedMotorDelay(20000);
-
-                //stay here: line following stops, the encoder motor can still be set in the web interface
-                motorL.brake();
-                motorR.brake();
-                robotMotionEnabled = false;
+                
             }
 
-            if(checkpointCounter == turnCheckpoint){
+            if(checkpointCounter == turnCheckpoint+1){
                 motorL.brake();
                 motorR.brake();
                 delay(200);
@@ -198,6 +199,17 @@ void drivingLoop(PIDController &pid, QTRSensors &qtr, Motor &motorL, Motor &moto
                 pid.integral = 0;
                 pid.prevError = 0;
                 delay(200);
+
+            
+                /*motorL.setSpeed(800);
+                motorR.setSpeed(800);
+                delay(1000);
+                motorL.brake();
+                motorR.brake();*/
+                shootSequence(false, 150);
+                shootSequence(false, 130);
+                shootSequence(false, 100);
+            
             }
 
             if(checkpointCounter == finalCheckpoint){
@@ -205,25 +217,47 @@ void drivingLoop(PIDController &pid, QTRSensors &qtr, Motor &motorL, Motor &moto
                 motorL.brake();
                 motorR.brake();
                 robotMotionEnabled = false;
+                
             }
 
-            if(checkpointCounter == dcCheckpoint){
+
+
+            if(checkpointCounter == 4){
+                motorL.brake();
+                motorR.brake();
+                for(int i = 0; i <= 10; i++){
+                    turnUntilPackage();
+                    delay(300);
+                }
+                robotMotionEnabled = false;
                 /*motorL.brake();
                 motorR.brake();
-                shield.motor(3).setSpeed(3000);
-                delay(2000);
-                shield.motor(3).stop();*/
+                motorL.setSpeed(800);
+                motorR.setSpeed(800);
+                delay(1000);
+                motorL.brake();
+                motorR.brake();
+                shootSequence(false, 90);
+                shootSequence(false, 60);
+                shootSequence(false, 110);
+                */
+            }
+
+            if(checkpointCounter == 5){
+                motorL.brake();
+                motorR.brake();
+                /*motorL.setSpeed(800);
+                motorR.setSpeed(800);
+                delay(1000);
+                motorL.brake();
+                motorR.brake();*/
+                shootSequence(false, 90);
+                shootSequence(false, 60);
+                shootSequence(false, 110);
             }
 
             if(checkpointCounter == servoCheckpoint){
-                /*shield.servo(1).setAngleRange(180);
-                motorL.brake();
-                motorR.brake();
-                shield.servo(1).setAngle(0);
-                delay(2000);
-                shield.servo(1).setAngle(180);
-                delay(2000);
-                shield.servo(1).setAngle(0);*/
+                shootSequence(false, 150);
             }
             break;
         default:

@@ -39,6 +39,9 @@
 #define ENCODER_A_PIN (10) // red
 #define ENCODER_B_PIN (11) // white
 
+// --- QTR-HD-01RC reflectance sensor for the barrier (CTRL left open: emitter always on) ---
+#define BARRIER_SENSOR_PIN (14)
+
 // --- Servo control via PCA9685 (I2C address 0x40) ---
 #define PCA9685_SERVO_I2C_ADDR (0x40)
 

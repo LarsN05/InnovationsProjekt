@@ -19,8 +19,8 @@ QTRSensors qtr;
 PIDController pid(pidControlKp, pidControlKi, pidControlKd, (float)(QTR_LINE_MAX_VALUE / 2));
 
 // Drive motor ports: swap these two numbers if the robot steers away from the line
-constexpr uint8_t driveMotorLeft = 1;
-constexpr uint8_t driveMotorRight = 2;
+constexpr uint8_t driveMotorLeft = 2;
+constexpr uint8_t driveMotorRight = 1;
 // Set to true if the robot drives backwards (sensor bar trailing) instead of forwards
 constexpr bool invertDriveMotors = false;
 
@@ -79,11 +79,30 @@ void setup()
   }
 
   initEncodedMotor();
+  initBarrierSensor();
   shield.motor(driveMotorLeft).setInverted(invertDriveMotors);
   shield.motor(driveMotorRight).setInverted(invertDriveMotors);
 
   maybeBlinkForBatteryLowVoltageWarning();
-  
+
+  /*for(int i = 0; i < 400; i++){
+    shield.motor(5).setSpeed(-800);    // kurzer Schub zum Losbrechen
+    encodedMotorDelay(50);
+    shield.motor(5).setSpeed(0);
+    encodedMotorDelay(500);
+  }*/
+  /*shield.servo(1).setAngleRange(135);
+  shield.servo(1).setAngle(130);
+  delay(4000);
+  shield.servo(1).setAngle(135);
+  delay(4000);
+  shield.servo(1).setAngle(125);
+  delay(200000);
+  */
+  /*turnUntilPackage();
+  delay(20000);*/
+  /*turnUntilPackage();
+  delay(20000);*/
 
 
 #if ENABLE_WEB_INTERFACE
@@ -128,12 +147,14 @@ void loop()
   printEncodedMotorDebug(); // controller state every 200 ms on Serial
 
   // Raw QTR values every 500 ms: move a black line under the sensors, the values must rise clearly
-  static uint32_t lastQtrPrintMs = 0;
+  // (temporarily disabled to keep the Serial Monitor readable while tuning the encoder motor)
+  /*static uint32_t lastQtrPrintMs = 0;
   if (millis() - lastQtrPrintMs >= 500)
   {
     lastQtrPrintMs = millis();
     printSensorValues(qtr);
-  }
+    Serial.printf("Barrier sensor: %u us\n", readBarrierSensor());
+  }*/
   return; // drive motors stay off, only the encoder motor runs
 #endif
 

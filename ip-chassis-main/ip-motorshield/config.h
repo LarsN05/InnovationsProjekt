@@ -58,6 +58,10 @@ constexpr float encoderSpeedKp = 2.0f;           // duty per rpm error: reacts i
 constexpr float encoderSpeedKi = 10.0f;          // duty per rpm error and second: removes the remaining error; lower if it oscillates
 constexpr uint8_t encoderRpmWindow = 5;          // rpm is measured over this many updates (5 x 20 ms = 100 ms); larger = smoother but slower
 
+// Barrier sensor: small value = strong reflection (object close or bright)
+constexpr uint16_t barrierTimeoutUs = 1000;      // read() returns this value when nothing reflects
+constexpr uint16_t barrierThreshold = 130;       // placeholder: measure the values with and without the barrier and pick one in between
+
 //checkpoints
 constexpr int distributionCenter = 1;
 constexpr int finalCheckpoint = 13;

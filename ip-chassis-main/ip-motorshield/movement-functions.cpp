@@ -12,6 +12,13 @@ constexpr uint32_t turnTimeOutMs = 5000; //constant for the maximum time a turn 
 constexpr uint32_t allignementMs = 500; //constant for the allignement reversal time
 constexpr uint16_t reversalSpeed = 600; //speed for reversal
 constexpr uint32_t allignementTimeOutMs = 3000; // timout for reversal in allignOnCheckpoint
+constexpr uint32_t revolverTimeOutMs = 10000;
+constexpr uint16_t revolverTurnSpeed = 1500;
+constexpr float rpmAccuracy = 8; // allowed deviation from the target rpm
+constexpr uint32_t spinUpTimeOutMs = 10000; // maximum time for the motor to reach the target rpm
+constexpr uint32_t rpmStableMs = 300; // the rpm has to stay within rpmAccuracy for this long
+constexpr float switchCenterDeg = 135; // center position of the switch servo
+constexpr float switchOffsetDeg = 15; // switch travel to each side of the center
 
 bool perform180Turn(QTRSensors &qtr, Motor &motorL, Motor &motorR){
     turnLeft(motorL, motorR);
@@ -210,6 +217,9 @@ void encodedMotorDelay(uint32_t ms){
   uint32_t startMs = millis();
   while(millis() - startMs < ms){
     updateEncodedMotor();
+#if ENCODER_MOTOR_TEST_MODE
+    printEncodedMotorDebug(); // controller state every 200 ms, also while setup() is running
+#endif
     delay(1);
   }
 }
@@ -233,6 +243,25 @@ long encodedMotorTicks(){
   return encoderTicks;
 }
 
+static QTRSensors barrierSensor;
+static const uint8_t barrierSensorPins[] = {BARRIER_SENSOR_PIN};
+
+void initBarrierSensor(){
+  barrierSensor.setTypeRC();
+  barrierSensor.setSensorPins(barrierSensorPins, 1);
+  barrierSensor.setTimeout(barrierTimeoutUs);
+}
+
+uint16_t readBarrierSensor(){
+  uint16_t value = 0;
+  barrierSensor.read(&value);
+  return value;
+}
+
+bool barrierDetected(){
+  return readBarrierSensor() < barrierThreshold;
+}
+
 void printEncodedMotorDebug(){
   static uint32_t lastPrintMs = 0;
   static uint32_t lastLoopCount = 0;
@@ -248,4 +277,51 @@ void printEncodedMotorDebug(){
   Serial.printf("t=%lu soll=%.0f ist=%.1f ticks=%ld duty=%.0f I=%.0f A=%d B=%d loopHz=%.0f\n",
                 nowMs, encodedMotorTargetRpm, encodedMotorMeasuredRpm, (long)encoderTicks, encodedMotorOutput,
                 encodedMotorIntegral, digitalRead(ENCODER_A_PIN), digitalRead(ENCODER_B_PIN), loopHz);
+}
+
+bool turnUntilPackage(){
+  Serial.printf("turnUntilPackage: start, barrier sensor %u us (threshold %u)\n", readBarrierSensor(), barrierThreshold);
+  shield.motor(5).setSpeed(revolverTurnSpeed);
+  bool pakageDetected = false;
+  uint32_t startMs = millis();
+  while(!pakageDetected && millis() - startMs < revolverTimeOutMs){
+    encodedMotorDelay(10);
+    pakageDetected = barrierDetected();
+  }
+  shield.motor(5).brake();
+  Serial.printf("turnUntilPackage: %s after %lu ms\n", pakageDetected ? "package detected" : "timeout", millis() - startMs);
+  return pakageDetected;
+}
+
+bool shootSequence(bool leftSlide, int rpm){
+  adjustSpeed(rpm);
+  setSwitch(leftSlide);
+  uint32_t startMs = millis();
+  uint32_t stableSinceMs = startMs;
+  bool rpmReached = false;
+  //wait until the rpm stays close to the target for rpmStableMs
+  while(!rpmReached && millis() - startMs < spinUpTimeOutMs){
+    encodedMotorDelay(10);
+    if(fabs(encodedMotorTargetRpmValue() - encodedMotorRpm()) > rpmAccuracy){
+      stableSinceMs = millis();
+    }
+    rpmReached = millis() - stableSinceMs >= rpmStableMs;
+  }
+  Serial.printf("shootSequence: target %.0f rpm, measured %.1f rpm, %s\n",
+                encodedMotorTargetRpmValue(), encodedMotorRpm(), rpmReached ? "rpm reached" : "rpm NOT reached -> revolver not turned");
+  //the revolver only turns once the motor runs at the target rpm
+  bool success = rpmReached && turnUntilPackage();
+  encodedMotorDelay(2000);
+  adjustSpeed(0);
+  return success;
+}
+
+void setSwitch(bool left){
+  /*if(left){
+    shield.servo(8).setAngle(switchCenterDeg + switchOffsetDeg);
+  }
+  else{
+    shield.servo(8).setAngle(switchCenterDeg - switchOffsetDeg);
+  }
+  */
 }
