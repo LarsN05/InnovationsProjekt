@@ -3,18 +3,34 @@
 #include "shared-globals.h"
 #include <Arduino.h>
 #include "movement-functions.h"
-#include "src/motorshield/motorshield.h"
+#include "mission.h"
+#include "onboard-led.h"
 
-extern Motorshield shield;
-
-float calculatePIDstep(PIDController &pid, float measurement, float executionFrequency)
+float calculatePIDstep(PIDController &pid, float measurement)
 {
     pidError = (int)(pid.target - measurement);
+
+    // dt from the time since the previous step; after reset() fall back to the nominal loop period.
+    const uint32_t nowUs = micros();
+    const bool firstStep = (pid.lastUpdateUs == 0);
+    float dt = 1.0f / (float)max(driveLoopHzTarget, 1); // normally 40 Hz, so dt = 0.025s
+    if (!firstStep)
+    {
+        const float measuredDt = (nowUs - pid.lastUpdateUs) * 1e-6f;
+        if (measuredDt > 0.0f && measuredDt < 0.2f)
+        {
+            dt = measuredDt;
+        }
+    }
+    pid.lastUpdateUs = nowUs;
+    if (firstStep)
+    {
+        pid.prevError = pidError; // no derivative kick on the first step after a reset
+    }
 
     // integral windup prevention
     const float maximumOutput = PWM_MAX_VALUE;
     float integralLimit = maximumOutput / pid.ki;
-    float dt = 1.0f / executionFrequency; // normally 40 Hz, so dt = 0.025s
     pid.integral += pidError * dt;
     pid.integral = constrain(pid.integral, -integralLimit, integralLimit);
 
@@ -67,38 +83,19 @@ void updateLineStatus()
 }
 
 /*
- *  @summary overcome static friction in low speed range
+ *  @summary overcome static friction in low speed range:
+ *  non-zero commands below minPWMtoMoveMotor are raised to it, keeping their direction.
  */
-static int compensateDeadzoneWithFlip(int speedCommand)
+static int compensateDeadzone(int speedCommand)
 {
     if (speedCommand == 0)
     {
         return 0;
     }
 
-    int sign = (speedCommand > 0) ? 1 : -1;
-    int magnitude = abs(speedCommand);
-
-    if (magnitude >= minPWMtoMoveMotor)
-    {
-        // Keep direction; ensure we overcome stiction
-        int pwm = magnitude; // already ≥ MIN
-        if (pwm > PWM_MAX_VALUE)
-        {
-            pwm = PWM_MAX_VALUE;
-        }
-        return sign * pwm;
-    }
-    else
-    {
-        // Flip direction and push magnitude above MIN
-        int flippedMag = 2 * minPWMtoMoveMotor - magnitude; // e.g., magnitude=44, MIN=45 -> -46
-        if (flippedMag > PWM_MAX_VALUE)
-        {
-            flippedMag = PWM_MAX_VALUE;
-        }
-        return -sign * flippedMag;
-    }
+    const int sign = (speedCommand > 0) ? 1 : -1;
+    const int magnitude = constrain(max(abs(speedCommand), minPWMtoMoveMotor), 0, PWM_MAX_VALUE);
+    return sign * magnitude;
 }
 
 void setMotorSpeeds(int signal, Motor &motorL, Motor &motorR)
@@ -108,8 +105,8 @@ void setMotorSpeeds(int signal, Motor &motorL, Motor &motorR)
 
     if (enableMotorDeadzoneCompensation)
     {
-        leftMotorSpeed = compensateDeadzoneWithFlip(leftMotorSpeed);
-        rightMotorSpeed = compensateDeadzoneWithFlip(rightMotorSpeed);
+        leftMotorSpeed = compensateDeadzone(leftMotorSpeed);
+        rightMotorSpeed = compensateDeadzone(rightMotorSpeed);
     }
 
     motorL.setSpeed(leftMotorSpeed);
@@ -120,6 +117,23 @@ void drivingLoop(PIDController &pid, QTRSensors &qtr, Motor &motorL, Motor &moto
 {
     int position = qtr.readLineBlack(qtrSensorValues);
     updateLineStatus();
+
+    // Checkpoint detection: the cross line must be seen on checkpointConfirmReads consecutive reads.
+    // The counter keeps running while the robot is stopped, so a cross line the robot is
+    // standing on (or is carried over) when Start is pressed is not counted.
+    static uint8_t crossLineReads = 0;
+    if (lineStatus == STOP)
+    {
+        if (crossLineReads < 255)
+        {
+            ++crossLineReads;
+        }
+    }
+    else
+    {
+        crossLineReads = 0;
+    }
+    const bool crossLineConfirmed = (crossLineReads == checkpointConfirmReads);
 
     if (!robotMotionEnabled)
     {
@@ -136,133 +150,34 @@ void drivingLoop(PIDController &pid, QTRSensors &qtr, Motor &motorL, Motor &moto
             motorL.stop();
             motorR.stop();
         }
+        pid.reset(); // start from a clean controller when Start is pressed again
         oldLineStatus = lineStatus;
         return;
     }
 
-    controlSignal = calculatePIDstep(pid, position, driveLoopHzTarget);
+    controlSignal = calculatePIDstep(pid, position);
     setMotorSpeeds(controlSignal, motorL, motorR);
 
-    if (lineStatus != oldLineStatus)
+    const bool lockoutOver = (millis() - (uint32_t)lastCheckpointTimeMs) >= checkpointLockoutMs;
+    if (crossLineConfirmed && lockoutOver)
     {
-        switch (lineStatus)
+        checkpointCounter++;
+        lastCheckpointTimeMs = millis();
+
+        MissionContext ctx{pid, qtr, motorL, motorR};
+        const bool ok = runCheckpointAction(checkpointCounter, ctx);
+
+        if (!robotMotionEnabled)
         {
-            // TODO for students: Implement your own cases needed to complete the required tasks your roboter has to complete during the run
-        case STOP:
-            checkpointCounter++;
-            lastCheckpointTimeMs = millis();
-
-            if (stopAtCheckpoints)
-            {
-                motorL.brake();
-                motorR.brake();
-                delay(1000);
-            }
-
-            if(checkpointCounter == distributionCenter){
-                motorL.brake();
-                motorR.brake();
-                //servo ansteuern
-                motorL.setSpeed(-800);
-                motorR.setSpeed(-800);
-                delay(500);
-                motorL.brake();
-                motorR.brake();
-                shield.servo(1).setAngleRange(270);
-                shield.servo(1).setAngle(0);
-                delay(500);
-                motorL.setSpeed(800);
-                motorR.setSpeed(800);
-                delay(900);
-                motorL.brake();
-                motorR.brake();
-                delay(500);
-                motorL.setSpeed(-800);
-                motorR.setSpeed(-800);
-                delay(600);
-                motorL.brake();
-                motorR.brake();
-                shield.servo(1).setAngle(150);
-                delay(1000);
-                
-            }
-
-            if(checkpointCounter == turnCheckpoint+1){
-                motorL.brake();
-                motorR.brake();
-                delay(200);
-                if(!perform180Turn(qtr, motorL, motorR)){
-                    robotMotionEnabled = false;
-                    blinkWarningPattern(255, 0, 0, 10);
-                }
-                //resetting the line following errors to ensure a clean start after the turn
-                pid.integral = 0;
-                pid.prevError = 0;
-                delay(200);
-
-            
-                /*motorL.setSpeed(800);
-                motorR.setSpeed(800);
-                delay(1000);
-                motorL.brake();
-                motorR.brake();*/
-                shootSequence(false, 150);
-                shootSequence(false, 130);
-                shootSequence(false, 100);
-            
-            }
-
-            if(checkpointCounter == finalCheckpoint){
-                allignOnCheckpoint(pid, qtr, motorL, motorR);
-                motorL.brake();
-                motorR.brake();
-                robotMotionEnabled = false;
-                
-            }
-
-
-
-            if(checkpointCounter == 4){
-                motorL.brake();
-                motorR.brake();
-                for(int i = 0; i <= 10; i++){
-                    turnUntilPackage();
-                    delay(300);
-                }
-                robotMotionEnabled = false;
-                /*motorL.brake();
-                motorR.brake();
-                motorL.setSpeed(800);
-                motorR.setSpeed(800);
-                delay(1000);
-                motorL.brake();
-                motorR.brake();
-                shootSequence(false, 90);
-                shootSequence(false, 60);
-                shootSequence(false, 110);
-                */
-            }
-
-            if(checkpointCounter == 5){
-                motorL.brake();
-                motorR.brake();
-                /*motorL.setSpeed(800);
-                motorR.setSpeed(800);
-                delay(1000);
-                motorL.brake();
-                motorR.brake();*/
-                shootSequence(false, 90);
-                shootSequence(false, 60);
-                shootSequence(false, 110);
-            }
-
-            if(checkpointCounter == servoCheckpoint){
-                shootSequence(false, 150);
-            }
-            break;
-        default:
-            break;
+            abortMission(); // Stop pressed during the action, or the run finished
         }
-        oldLineStatus = lineStatus;
+        else if (!ok)
+        {
+            abortMission();
+            robotMotionEnabled = false;
+            Serial.printf("Checkpoint %d: action failed, robot stopped\n", checkpointCounter);
+            blinkWarningPattern(255, 0, 0, 10);
+        }
     }
+    oldLineStatus = lineStatus;
 }

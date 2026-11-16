@@ -17,8 +17,51 @@ constexpr uint16_t revolverTurnSpeed = 1500;
 constexpr float rpmAccuracy = 8; // allowed deviation from the target rpm
 constexpr uint32_t spinUpTimeOutMs = 10000; // maximum time for the motor to reach the target rpm
 constexpr uint32_t rpmStableMs = 300; // the rpm has to stay within rpmAccuracy for this long
-constexpr float switchCenterDeg = 135; // center position of the switch servo
-constexpr float switchOffsetDeg = 15; // switch travel to each side of the center
+
+bool missionAborted(){
+  return !robotMotionEnabled;
+}
+
+void abortMission(){
+  shield.motor(driveMotorLeft).brake();
+  shield.motor(driveMotorRight).brake();
+  shield.motor(revolverMotorNumber).brake();
+  adjustSpeed(0);                              // updateEncodedMotor() brakes the shooter on its next call
+  shield.motor(encodedMotorNumber).brake();
+}
+
+bool missionWait(uint32_t ms){
+  const uint32_t startMs = millis();
+  while(true){
+    if(missionAborted()){
+      abortMission();
+      return false;
+    }
+    const uint32_t elapsedMs = millis() - startMs;
+    if(elapsedMs >= ms){
+      return true;
+    }
+    const uint32_t remainingMs = ms - elapsedMs;
+    encodedMotorDelay(remainingMs < 5 ? remainingMs : 5); // keeps the shooter speed regulated while waiting
+  }
+}
+
+static float batteryCompensationFactor = 1.0f;
+
+void updateBatteryCompensation(){
+  // While monitoring is enabled the web task owns the ADC, so use its cached value instead of reading again.
+  const float batteryV = enableSupplyAndM1M2CurrentMonitoring ? batteryVoltageV : shield.batteryVoltage();
+  if(!isfinite(batteryV) || batteryV < minValidBatteryVoltageV){
+    batteryCompensationFactor = 1.0f;
+  }
+  else{
+    batteryCompensationFactor = constrain(nominalBatteryVoltageV / batteryV, 0.8f, 1.3f);
+  }
+}
+
+int compensateForBattery(int speed){
+  return constrain((int)lroundf(speed * batteryCompensationFactor), -PWM_MAX_VALUE, PWM_MAX_VALUE);
+}
 
 bool perform180Turn(QTRSensors &qtr, Motor &motorL, Motor &motorR){
     turnLeft(motorL, motorR);
@@ -30,13 +73,13 @@ bool perform180Turn(QTRSensors &qtr, Motor &motorL, Motor &motorR){
 
     //first turn until the sensor is not on the line anymore
     while((sensorValues[2] > BLACKLINE_THRESHOLD) && millis() - startOfTurn < turnTimeOutMs){
-      delay(10);
+      if(!missionWait(10)) return false;
       qtr.readLineBlack(sensorValues);
     }
 
     //turn until the it detects the line again with minturntime to make sure it doesn't stop at a perpendicular line
     while(((sensorValues[2] < BLACKLINE_THRESHOLD) || (millis() - startOfTurn < minTurnTimeMs)) && millis() - startOfTurn < turnTimeOutMs){
-      delay(10);
+      if(!missionWait(10)) return false;
       qtr.readLineBlack(sensorValues);
     }
 
@@ -80,24 +123,25 @@ bool allignOnCheckpoint(PIDController &pid, QTRSensors &qtr, Motor &motorL, Moto
   
   uint16_t sensorValues[QTR_SENSOR_COUNT];
   uint32_t startMs = millis();
-  uint32_t periodMs = 1000/driveLoopHzTarget;
+  uint32_t periodMs = 1000/max(driveLoopHzTarget, 1);
 
   //follow the line for a short time to ensure proper allignement
   while(millis() - startMs < allignementMs){
     int position = qtr.readLineBlack(qtrSensorValues);
-    float signal = calculatePIDstep(pid, position, driveLoopHzTarget);
+    float signal = calculatePIDstep(pid, position);
     setMotorSpeeds(signal, motorL, motorR);
-    delay(periodMs);
+    if(!missionWait(periodMs)) return false;
   }
   motorL.brake();
   motorR.brake();
-  motorL.setSpeed(-reversalSpeed);
-  motorR.setSpeed(-reversalSpeed);
+  updateBatteryCompensation();
+  motorL.setSpeed(compensateForBattery(-reversalSpeed));
+  motorR.setSpeed(compensateForBattery(-reversalSpeed));
   qtr.readLineBlack(sensorValues);
-  
+
   //reverse until line is detected again
   while(sensorValues[0] < BLACKLINE_THRESHOLD && millis() - startMs < allignementTimeOutMs){
-      delay(10);
+      if(!missionWait(10)) return false;
       qtr.readLineBlack(sensorValues);
   }
   
@@ -255,6 +299,7 @@ void initBarrierSensor(){
 uint16_t readBarrierSensor(){
   uint16_t value = 0;
   barrierSensor.read(&value);
+  barrierValueUs = value; // last reading, shown in the web interface telemetry
   return value;
 }
 
@@ -281,14 +326,14 @@ void printEncodedMotorDebug(){
 
 bool turnUntilPackage(){
   Serial.printf("turnUntilPackage: start, barrier sensor %u us (threshold %u)\n", readBarrierSensor(), barrierThreshold);
-  shield.motor(5).setSpeed(revolverTurnSpeed);
+  shield.motor(revolverMotorNumber).setSpeed(revolverTurnSpeed);
   bool pakageDetected = false;
   uint32_t startMs = millis();
   while(!pakageDetected && millis() - startMs < revolverTimeOutMs){
-    encodedMotorDelay(10);
+    if(!missionWait(10)) return false; // Stop pressed: abortMission() already braked the revolver
     pakageDetected = barrierDetected();
   }
-  shield.motor(5).brake();
+  shield.motor(revolverMotorNumber).brake();
   Serial.printf("turnUntilPackage: %s after %lu ms\n", pakageDetected ? "package detected" : "timeout", millis() - startMs);
   return pakageDetected;
 }
@@ -301,7 +346,7 @@ bool shootSequence(bool leftSlide, int rpm){
   bool rpmReached = false;
   //wait until the rpm stays close to the target for rpmStableMs
   while(!rpmReached && millis() - startMs < spinUpTimeOutMs){
-    encodedMotorDelay(10);
+    if(!missionWait(10)) return false; // Stop pressed: abortMission() already stopped the shooter
     if(fabs(encodedMotorTargetRpmValue() - encodedMotorRpm()) > rpmAccuracy){
       stableSinceMs = millis();
     }
@@ -311,17 +356,17 @@ bool shootSequence(bool leftSlide, int rpm){
                 encodedMotorTargetRpmValue(), encodedMotorRpm(), rpmReached ? "rpm reached" : "rpm NOT reached -> revolver not turned");
   //the revolver only turns once the motor runs at the target rpm
   bool success = rpmReached && turnUntilPackage();
-  encodedMotorDelay(2000);
+  missionWait(2000); // keep the shooter running while the package leaves
   adjustSpeed(0);
-  return success;
+  return success && !missionAborted();
 }
 
+// Moves the switch servo to the left or right slide. Does nothing while enableSlideSwitch is false (config.h).
 void setSwitch(bool left){
-  /*if(left){
-    shield.servo(8).setAngle(switchCenterDeg + switchOffsetDeg);
+  if(!enableSlideSwitch){
+    return;
   }
-  else{
-    shield.servo(8).setAngle(switchCenterDeg - switchOffsetDeg);
-  }
-  */
+  ShieldServo &switchServo = shield.servo(slideSwitchServo);
+  switchServo.setAngleRange(slideSwitchRangeDeg);
+  switchServo.setAngle(left ? switchCenterDeg + switchOffsetDeg : switchCenterDeg - switchOffsetDeg);
 }

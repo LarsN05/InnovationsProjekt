@@ -32,6 +32,8 @@ float driveLoopExecUsMeasured = 0.0f;
 float telemetryHzMeasured = 0.0f;
 float telemetryExecUsPeak = 0.0f;
 
+uint16_t barrierValueUs = 0;
+
 uint16_t qtrSensorValues[QTR_SENSOR_COUNT]; // Array zur Speicherung der aktuellen Sensordaten
 bool qtrSensorStatus[QTR_SENSOR_COUNT];     // Array zur Speicherung, ob die Sensoren die Linie erkennen
 

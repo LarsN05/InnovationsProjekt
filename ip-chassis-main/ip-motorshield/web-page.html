@@ -306,6 +306,10 @@
             <button class="btn-success" style="flex:1;" onclick="sendRobotCommand('start')">Start Moving</button>
             <button class="btn-danger" style="flex:1;" onclick="sendRobotCommand('stop')">Stop Moving</button>
           </div>
+          <div class="row">
+            <input id="checkpointSetInput" type="number" min="0" max="999" step="1" value="0" style="width:70px;">
+            <button class="btn-light" style="flex:1;" onclick="sendSetCheckpoint()">Set checkpoint counter</button>
+          </div>
           <div class="small" id="apInfo">Connect to the ESP32 AP, then click Connect.</div>
         </div>
 
@@ -410,6 +414,7 @@
           <div class="telemetry-item"><div>Normal motor speed</div><div class="value" id="motorSpeedOut">-</div></div>
           <div class="telemetry-item"><div>Checkpoints</div><div class="value" id="checkpointCounterOut">-</div></div>
           <div class="telemetry-item"><div>Last checkpoint ms</div><div class="value" id="checkpointTimeMsOut">-</div></div>
+          <div class="telemetry-item"><div>Barrier sensor us</div><div class="value" id="barrierOut">-</div></div>
         </div>
         <details style="margin-top:8px;">
           <summary>advanced telemetry</summary>
@@ -561,6 +566,18 @@
       addMsg(`Sent command=${command}`);
     }
 
+    // Sets the checkpoint counter, e.g. to test one checkpoint action without driving the whole course.
+    // The next cross line the robot reaches is counted as this value + 1.
+    function sendSetCheckpoint() {
+      if (!isOpen()) {
+        addMsg('Not connected.');
+        return;
+      }
+      const n = Math.max(0, Math.round(Number($('checkpointSetInput').value) || 0));
+      ws.send(`command=set_checkpoint=${n}`);
+      addMsg(`Sent command=set_checkpoint=${n}`);
+    }
+
     let encoderSliderTimer = null;
 
     function sendEncoderRpm(rpm) {
@@ -669,7 +686,7 @@
       const magic = readU32(view, off); off += 4;
       const version = readU16(view, off); off += 2;
       const totalLen = readU16(view, off); off += 2;
-      if (magic !== 0x314D4C54 || version !== 4 || totalLen !== buffer.byteLength) return null;
+      if (magic !== 0x314D4C54 || version !== 5 || totalLen !== buffer.byteLength) return null;
 
       const qtrs = [
         readU16(view, off + 0),
@@ -713,7 +730,12 @@
       const encoderRpm = readF32(view, off); off += 4;
       const encoderTicks = readI32(view, off); off += 4;
 
+      const barrierValueUs = readU16(view, off); off += 2;
+      const barrierThresholdUs = readU16(view, off); off += 2;
+
       return {
+        barrierValueUs,
+        barrierThresholdUs,
         timestamp,
         encoderTargetRpm,
         encoderRpm,
@@ -805,9 +827,13 @@
       $('encoderTargetOut').textContent = Number(t.encoderTargetRpm).toFixed(0);
       $('encoderRpmOut').textContent = Number(t.encoderRpm).toFixed(1);
       $('encoderTicksOut').textContent = String(t.encoderTicks);
+      $('barrierOut').textContent = `${t.barrierValueUs}${t.barrierValueUs < t.barrierThresholdUs ? ' (package)' : ''}`;
 
       pushTelemetryRow(t);
 
+      if (t.checkpointCounter < lastCheckpointCounter) {
+        lastCheckpointCounter = t.checkpointCounter; // counter was set lower from the web interface
+      }
       if (t.checkpointCounter > lastCheckpointCounter) {
         checkpoints.push({ t: t.timestamp, n: t.checkpointCounter });
         if (checkpoints.length > MAX_CHECKPOINTS) checkpoints.shift();

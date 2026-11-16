@@ -62,12 +62,60 @@ constexpr uint8_t encoderRpmWindow = 5;          // rpm is measured over this ma
 constexpr uint16_t barrierTimeoutUs = 1000;      // read() returns this value when nothing reflects
 constexpr uint16_t barrierThreshold = 130;       // placeholder: measure the values with and without the barrier and pick one in between
 
-//checkpoints
+// Motor ports (M1..M6). Drive motors should stay on M1/M2 (direct ESP32 PWM, lowest latency).
+constexpr uint8_t driveMotorLeft = 2;      // swap these two numbers if the robot steers away from the line
+constexpr uint8_t driveMotorRight = 1;
+constexpr bool invertDriveMotors = false;  // set to true if the robot drives backwards (sensor bar trailing)
+constexpr uint8_t revolverMotorNumber = 5;
+
+// Checkpoint detection (cross line = all 5 sensors black)
+constexpr uint8_t checkpointConfirmReads = 2;  // consecutive all-black drive-loop reads needed to count a checkpoint (2 x 25 ms at 40 Hz). Set to 1 if checkpoints are missed at high speed.
+constexpr uint32_t checkpointLockoutMs = 600;  // after a checkpoint, further cross lines are ignored for this long (filters double counts)
+
+// Mission: checkpoint numbers. What happens at each one is listed in the table in mission.cpp.
 constexpr int distributionCenter = 1;
-constexpr int finalCheckpoint = 13;
-constexpr int turnCheckpoint = 7;
+constexpr int revolverLoadCheckpoint = 4;
+constexpr int firstShootCheckpoint = 5;
+constexpr int turnCheckpoint = 8;    // 180 degree turn + shooting (was written as turnCheckpoint + 1 with turnCheckpoint = 7)
 constexpr int servoCheckpoint = 10;
-constexpr int dcCheckpoint = 12;
+constexpr int dcCheckpoint = 12;     // not used by the mission yet
+constexpr int finalCheckpoint = 13;
+
+// Mission: shooting and revolver
+constexpr int firstShootRpms[] = {90, 60, 110};   // at firstShootCheckpoint
+constexpr int turnShootRpms[] = {150, 130, 100};  // at turnCheckpoint, after the 180 degree turn
+constexpr int servoCheckpointShootRpm = 150;
+constexpr int revolverLoadTurns = 10;             // revolver turns at revolverLoadCheckpoint (the old loop ran 11 times)
+constexpr uint32_t revolverLoadPauseMs = 300;
+
+// Mission: distribution center (checkpoint 1).
+// The moves are measured from the checkpoint cross line instead of being purely timed:
+// each move drives until the cross line is reached or left, then keeps going for the "extra" time.
+// The extra times are first estimates derived from the old timing (500 / 900 / 600 ms) - tune them on the track.
+constexpr int missionDriveSpeed = 800;
+constexpr uint8_t distributionServo = 1;
+constexpr float distributionServoRangeDeg = 270.0f;
+constexpr float distributionServoDownDeg = 0.0f;
+constexpr float distributionServoUpDeg = 150.0f;
+constexpr uint32_t distributionBackOffExtraMs = 400;  // back off: until the cross line is left, then this long
+constexpr uint32_t distributionForwardExtraMs = 400;  // forward: until the cross line is reached again, then this long
+constexpr uint32_t distributionReturnExtraMs = 200;   // back: until the cross line is reached again, then this long
+constexpr uint32_t distributionServoSettleMs = 500;
+constexpr uint32_t distributionFinalWaitMs = 1000;
+constexpr uint32_t crossLineTimeoutMs = 2000;         // a move that does not find the cross line in time stops the run
+
+// Mission: drive moves
+constexpr uint32_t moveRampMs = 100;               // speed ramps up over this time to avoid wheel slip
+constexpr float nominalBatteryVoltageV = 12.6f;    // mission move speeds are scaled by nominal / measured battery voltage
+constexpr float minValidBatteryVoltageV = 9.0f;    // below this (USB only, power switch off) no compensation is applied
+constexpr uint32_t checkpointStopPauseMs = 1000;   // pause for "Stop at checkpoints" in the web interface
+
+// Slide switch servo (setSwitch). Leave disabled until the servo is mounted.
+constexpr bool enableSlideSwitch = false;
+constexpr uint8_t slideSwitchServo = 8;
+constexpr float slideSwitchRangeDeg = 270.0f;      // set to 180 for a 180 degree servo
+constexpr float switchCenterDeg = 135;             // center position of the switch servo
+constexpr float switchOffsetDeg = 15;              // switch travel to each side of the center
 
 
 #define BLACKLINE_THRESHOLD 300 // Minimum threshold for the center sensor to consider the robot to be centered on. Note that this value depends on supply voltage (ca. 300 for 3V3 and ca. 550 for 5V) and the reflectivity of the surface. If the calibration does not finish, try to lower this threshold.

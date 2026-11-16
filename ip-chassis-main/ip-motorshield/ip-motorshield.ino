@@ -18,11 +18,7 @@ Mcp23017 &mcp = shield.gpio();
 QTRSensors qtr;
 PIDController pid(pidControlKp, pidControlKi, pidControlKd, (float)(QTR_LINE_MAX_VALUE / 2));
 
-// Drive motor ports: swap these two numbers if the robot steers away from the line
-constexpr uint8_t driveMotorLeft = 2;
-constexpr uint8_t driveMotorRight = 1;
-// Set to true if the robot drives backwards (sensor bar trailing) instead of forwards
-constexpr bool invertDriveMotors = false;
+// Drive motor ports (driveMotorLeft / driveMotorRight / invertDriveMotors) are set in config.h.
 
 constexpr float batteryWarn40PercentV = 13.1f;
 constexpr float batteryWarn20PercentV = 12.9f;
@@ -136,11 +132,19 @@ void setup()
 
   clearOnboardLed();
 }
-
+//asjdklfökj
 void loop()
 {
   blinkPeriodically();
   updateEncodedMotor();
+
+  // Barrier sensor reading for the web interface telemetry (helps to choose barrierThreshold).
+  static uint32_t lastBarrierReadMs = 0;
+  if (millis() - lastBarrierReadMs >= 100)
+  {
+    lastBarrierReadMs = millis();
+    readBarrierSensor();
+  }
 
 #if ENCODER_MOTOR_TEST_MODE
   

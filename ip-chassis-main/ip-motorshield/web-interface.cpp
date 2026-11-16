@@ -81,6 +81,9 @@ struct __attribute__((packed)) TelemetryBin
     float encoderTargetRpm;
     float encoderRpm;
     int32_t encoderTicks;
+
+    uint16_t barrierValueUs;
+    uint16_t barrierThresholdUs;
 };
 
 void buildAccessPointSsid()
@@ -178,7 +181,7 @@ static inline TelemetryBin makeTelemetryBin()
 {
     TelemetryBin telemetry{};
     telemetry.magic = 0x314D4C54;
-    telemetry.version = 4;
+    telemetry.version = 5;
     telemetry.total_len = sizeof(TelemetryBin);
 
     telemetry.qtr0 = qtrSensorValues[0];
@@ -217,6 +220,9 @@ static inline TelemetryBin makeTelemetryBin()
     telemetry.encoderTargetRpm = encodedMotorTargetRpmValue();
     telemetry.encoderRpm = encodedMotorRpm();
     telemetry.encoderTicks = encodedMotorTicks();
+
+    telemetry.barrierValueUs = barrierValueUs;
+    telemetry.barrierThresholdUs = barrierThreshold;
 
     return telemetry;
 }
@@ -291,8 +297,7 @@ void applyParamsFromCsv(const char *payload)
         activePid->kp = pidControlKp;
         activePid->ki = pidControlKi;
         activePid->kd = pidControlKd;
-        activePid->integral = 0;
-        activePid->prevError = 0;
+        activePid->reset();
     }
 
     Serial.printf("Params updated: P=%.5f I=%.5f D=%.5f motor=%d driveHzTarget=%d telemetryHzTarget=%d deadzone=%d minPWM=%d stopAtCheckpoint=%d brakeWhenStopped=%d monitoring=%d\n",
@@ -320,7 +325,8 @@ void applyWebCommand(const char *payload, uint8_t clientNum)
 
     if (strncmp(payload, "command=stop", 12) == 0)
     {
-        robotMotionEnabled = false;
+        robotMotionEnabled = false; // a running checkpoint action notices this within a few ms (missionWait)
+        adjustSpeed(0);             // also stops the shooter (e.g. after an encoder motor test)
         webSocketServer.sendTXT(clientNum, "status=stopped");
         return;
     }
@@ -328,6 +334,17 @@ void applyWebCommand(const char *payload, uint8_t clientNum)
     if (strncmp(payload, "command=get_params", 18) == 0)
     {
         sendParamsToClient(clientNum);
+        return;
+    }
+
+    int checkpoint = 0;
+    if (sscanf(payload, "command=set_checkpoint=%d", &checkpoint) == 1)
+    {
+        checkpointCounter = constrain(checkpoint, 0, 999);
+        char reply[40];
+        snprintf(reply, sizeof(reply), "status=checkpoint=%d", checkpointCounter);
+        webSocketServer.sendTXT(clientNum, reply);
+        Serial.printf("Checkpoint counter set to %d\n", checkpointCounter);
         return;
     }
 

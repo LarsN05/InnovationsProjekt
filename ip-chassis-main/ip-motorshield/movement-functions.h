@@ -5,6 +5,14 @@
 #include "onboard-led.h"
 #include "config.h"
 
+// Mission helpers: every waiting step of a checkpoint action goes through missionWait(),
+// so the web interface Stop button takes effect within a few milliseconds.
+bool missionWait(uint32_t ms);                        // like encodedMotorDelay(), but returns false (and calls abortMission()) once Stop was pressed
+bool missionAborted();                                // true once Stop was pressed (robotMotionEnabled == false)
+void abortMission();                                  // brakes the drive motors and the revolver, stops the shooter
+void updateBatteryCompensation();                     // measures the battery once; call at the start of a manoeuvre
+int compensateForBattery(int speed);                  // scales a speed by nominal / measured battery voltage
+
 bool perform180Turn(QTRSensors &qtr, Motor &motorL, Motor &motorR);
 bool allignOnCheckpoint(PIDController &pid, QTRSensors &qtr, Motor &motorL, Motor &motorR);
 void initEncodedMotor();                              // call once in setup()

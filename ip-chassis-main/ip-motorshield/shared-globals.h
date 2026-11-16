@@ -35,6 +35,8 @@ extern float driveLoopExecUsMeasured;
 extern float telemetryHzMeasured;
 extern float telemetryExecUsPeak;
 
+extern uint16_t barrierValueUs; // last barrier sensor reading in us (small = package/reflection)
+
 extern uint16_t qtrSensorValues[QTR_SENSOR_COUNT]; // Array zur Speicherung der aktuellen Sensordaten
 extern bool qtrSensorStatus[QTR_SENSOR_COUNT];     // Array zur Speicherung, ob die Sensoren die Linie erkennen
 
