@@ -30,4 +30,5 @@ uint16_t readBarrierSensor();                         // raw value in us, blocks
 bool barrierDetected();                               // true if the value is below barrierThreshold
 bool turnUntilPackage();                              // true if a package was detected before the timeout
 bool shootSequence(bool leftSlide, int rpm);          // true if the rpm was reached and a package was detected
-void setSwitch(bool left);                            // moves the switch servo to the left or right slide
+void setSwitch(bool left);                            // moves the switch servo to the left or right slide (only if enableSlideSwitch)
+float setSwitchAngle(float deg);                      // moves the switch servo to an angle (always), returns the clamped angle

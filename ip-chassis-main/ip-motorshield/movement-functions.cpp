@@ -361,12 +361,20 @@ bool shootSequence(bool leftSlide, int rpm){
   return success && !missionAborted();
 }
 
+// Moves the switch servo to an absolute angle. Works even while enableSlideSwitch is false
+// (used by the web interface buttons to test the servo and find the right angles).
+float setSwitchAngle(float deg){
+  deg = constrain(deg, 0.0f, slideSwitchRangeDeg);
+  ShieldServo &switchServo = shield.servo(slideSwitchServo);
+  switchServo.setAngleRange(slideSwitchRangeDeg);
+  switchServo.setAngle(deg);
+  return deg;
+}
+
 // Moves the switch servo to the left or right slide. Does nothing while enableSlideSwitch is false (config.h).
 void setSwitch(bool left){
   if(!enableSlideSwitch){
     return;
   }
-  ShieldServo &switchServo = shield.servo(slideSwitchServo);
-  switchServo.setAngleRange(slideSwitchRangeDeg);
-  switchServo.setAngle(left ? switchCenterDeg + switchOffsetDeg : switchCenterDeg - switchOffsetDeg);
+  setSwitchAngle(left ? switchCenterDeg + switchOffsetDeg : switchCenterDeg - switchOffsetDeg);
 }

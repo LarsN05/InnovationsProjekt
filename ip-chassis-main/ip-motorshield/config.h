@@ -9,6 +9,15 @@
 // the robot does not drive. Set the motor rpm live in the web interface ("Encoder motor test").
 #define ENCODER_MOTOR_TEST_MODE 0
 
+// Set to 1 to test allignOnCheckpoint() alone: the robot follows the line normally, but at EVERY
+// cross line it only runs the alignment (no mission actions) and then stops. Results go to Serial.
+// Press Start in the web interface for the next try. Set back to 0 for the real run.
+#define ALIGN_TEST_MODE 0
+
+#if ALIGN_TEST_MODE && ENCODER_MOTOR_TEST_MODE
+#error "ALIGN_TEST_MODE and ENCODER_MOTOR_TEST_MODE cannot both be 1"
+#endif
+
 constexpr char accessPointNamePrefix[] = "IP-Motorshield";  // The WiFi SSID will be this prefix followed by the last 3 bytes of the MAC address, e.g. "IP-Motorshield-1A2B3C".
 constexpr char accessPointTeamName[] = "H09";  // Insert team name here, e.g. "TeamA"
 constexpr char accessPointPassword[] = "dropzone9886";  // You should change the default password such that no other person can easily connect to your system and control it.

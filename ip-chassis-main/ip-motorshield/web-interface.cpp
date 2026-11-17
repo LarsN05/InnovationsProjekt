@@ -348,6 +348,26 @@ void applyWebCommand(const char *payload, uint8_t clientNum)
         return;
     }
 
+    // Switch servo (Weiche): command=switch=left|right|center or command=switch_angle=<deg>
+    float switchDeg = -1.0f;
+    if (strcmp(payload, "command=switch=left") == 0)
+        switchDeg = switchCenterDeg + switchOffsetDeg;
+    else if (strcmp(payload, "command=switch=right") == 0)
+        switchDeg = switchCenterDeg - switchOffsetDeg;
+    else if (strcmp(payload, "command=switch=center") == 0)
+        switchDeg = switchCenterDeg;
+    else if (sscanf(payload, "command=switch_angle=%f", &switchDeg) != 1)
+        switchDeg = -1.0f;
+    if (switchDeg >= 0.0f)
+    {
+        switchDeg = setSwitchAngle(switchDeg);
+        char reply[40];
+        snprintf(reply, sizeof(reply), "status=switch=%.1f", switchDeg);
+        webSocketServer.sendTXT(clientNum, reply);
+        Serial.printf("Switch servo set to %.1f deg\n", switchDeg);
+        return;
+    }
+
     int rpm = 0;
     if (sscanf(payload, "command=encoder_rpm=%d", &rpm) == 1)
     {

@@ -4,6 +4,8 @@
 #include "movement-functions.h"
 #include "shared-globals.h"
 #include "src/motorshield/motorshield.h"
+#include "qtr-sensor-util.h"
+#include "onboard-led.h"
 
 #include <Arduino.h>
 
@@ -213,8 +215,39 @@ const CheckpointAction mission[] = {
 
 } // namespace
 
+#if ALIGN_TEST_MODE
+// Alignment test: run only allignOnCheckpoint() at every cross line, report, then stop.
+static bool runAlignTest(int checkpointNumber, MissionContext &ctx)
+{
+    Serial.printf("Align test #%d: cross line detected, aligning...\n", checkpointNumber);
+    const uint32_t startMs = millis();
+    const bool aligned = allignOnCheckpoint(ctx.pid, ctx.qtr, ctx.motorL, ctx.motorR);
+    const uint32_t durationMs = millis() - startMs;
+    brakeDrive(ctx);
+
+    if (!robotMotionEnabled)
+    {
+        Serial.println("Align test: aborted by Stop");
+        return true;
+    }
+
+    Serial.printf("Align test #%d: %s after %lu ms. Sensor values at the end position:\n",
+                  checkpointNumber, aligned ? "OK" : "FAILED (timeout)", (unsigned long)durationMs);
+    printSensorValues(ctx.qtr);
+
+    robotMotionEnabled = false; // stop and wait for Start in the web interface
+    ctx.pid.reset();
+    blinkWarningPattern(aligned ? 0 : 255, aligned ? 255 : 0, 0, 3); // green = OK, red = failed
+    return true;
+}
+#endif
+
 bool runCheckpointAction(int checkpointNumber, MissionContext &ctx)
 {
+#if ALIGN_TEST_MODE
+    return runAlignTest(checkpointNumber, ctx);
+#endif
+
     const CheckpointAction *action = nullptr;
     for (const CheckpointAction &entry : mission)
     {

@@ -314,6 +314,22 @@
         </div>
 
         <div class="box">
+          <div style="font-weight:700; margin-bottom:6px;">Switch servo (Weiche)</div>
+          <div class="params">
+            <div class="row">
+              <button style="flex:1;" onclick="sendSwitch('left')">Left</button>
+              <button class="btn-light" style="flex:1;" onclick="sendSwitch('center')">Center</button>
+              <button style="flex:1;" onclick="sendSwitch('right')">Right</button>
+            </div>
+            <div class="row">
+              <input id="switchAngleInput" type="number" min="0" max="270" step="1" value="135" style="width:70px;">
+              <button class="btn-light" style="flex:1;" onclick="sendSwitchAngle()">Set angle (deg)</button>
+            </div>
+            <div class="small">Current angle: <b id="switchAngleOut">-</b> deg. Left/Right = center &plusmn; offset from config.h.</div>
+          </div>
+        </div>
+
+        <div class="box">
           <div style="font-weight:700; margin-bottom:6px;">Encoder motor test</div>
           <div class="params">
             <label for="encoderRpmSlider">Target rpm: <span id="encoderRpmLabel">0</span></label>
@@ -578,6 +594,26 @@
       addMsg(`Sent command=set_checkpoint=${n}`);
     }
 
+    // Switch servo (Weiche): preset positions from config.h or a free angle to find the right values.
+    function sendSwitch(position) {
+      if (!isOpen()) {
+        addMsg('Not connected.');
+        return;
+      }
+      ws.send(`command=switch=${position}`);
+      addMsg(`Sent command=switch=${position}`);
+    }
+
+    function sendSwitchAngle() {
+      if (!isOpen()) {
+        addMsg('Not connected.');
+        return;
+      }
+      const deg = Math.max(0, Math.min(270, Number($('switchAngleInput').value) || 0));
+      ws.send(`command=switch_angle=${deg}`);
+      addMsg(`Sent command=switch_angle=${deg}`);
+    }
+
     let encoderSliderTimer = null;
 
     function sendEncoderRpm(rpm) {
@@ -645,6 +681,10 @@
       if (!msg) return;
       if (msg.startsWith('status=')) {
         const statusValue = msg.slice(7);
+        if (statusValue.startsWith('switch=')) {
+          $('switchAngleOut').textContent = statusValue.slice(7);
+          $('switchAngleInput').value = Math.round(Number(statusValue.slice(7)));
+        }
         addMsg(`Robot status: ${statusValue}`);
         return;
       }
