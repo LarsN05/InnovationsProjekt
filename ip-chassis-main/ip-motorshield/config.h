@@ -3,11 +3,11 @@
 
 // Set to 1 to enable the WiFi web interface for live telemetry and remote control.
 // Set to 0 for standalone mode: the robot auto-starts after calibration with no WiFi.
-#define ENABLE_WEB_INTERFACE 1
+#define ENABLE_WEB_INTERFACE 0
 
 // Set to 1 to test the encoder motor: skips the sensor calibration and the line following,
 // the robot does not drive. Set the motor rpm live in the web interface ("Encoder motor test").
-#define ENCODER_MOTOR_TEST_MODE 0
+#define ENCODER_MOTOR_TEST_MODE 1
 
 // Set to 1 to test allignOnCheckpoint() alone: the robot follows the line normally, but at EVERY
 // cross line it only runs the alignment (no mission actions) and then stops. Results go to Serial.
@@ -69,7 +69,7 @@ constexpr uint8_t encoderRpmWindow = 5;          // rpm is measured over this ma
 
 // Barrier sensor: small value = strong reflection (object close or bright)
 constexpr uint16_t barrierTimeoutUs = 1000;      // read() returns this value when nothing reflects
-constexpr uint16_t barrierThreshold = 130;       // placeholder: measure the values with and without the barrier and pick one in between
+constexpr uint16_t barrierThreshold = 150;       // placeholder: measure the values with and without the barrier and pick one in between
 
 // Motor ports (M1..M6). Drive motors should stay on M1/M2 (direct ESP32 PWM, lowest latency).
 constexpr uint8_t driveMotorLeft = 2;      // swap these two numbers if the robot steers away from the line
@@ -82,20 +82,48 @@ constexpr uint8_t checkpointConfirmReads = 2;  // consecutive all-black drive-lo
 constexpr uint32_t checkpointLockoutMs = 600;  // after a checkpoint, further cross lines are ignored for this long (filters double counts)
 
 // Mission: checkpoint numbers. What happens at each one is listed in the table in mission.cpp.
+// Each cross line counts once (the distribution center is no longer counted twice):
+//  1 distribution center | 2-4 house close (right of the field, on the left of the robot)
+//  5-7 left line, house medium (bottom left) on the left of the robot | turn at 7
+//  after the turn: 7, 8, 9 left line, house far (top left) on the left of the robot
+//  10-12 house close (now on the right, the cannon cannot reach it) | 13 distribution center = finish
 constexpr int distributionCenter = 1;
-constexpr int revolverLoadCheckpoint = 4;
-constexpr int firstShootCheckpoint = 5;
-constexpr int turnCheckpoint = 8;    // 180 degree turn + shooting (was written as turnCheckpoint + 1 with turnCheckpoint = 7)
-constexpr int servoCheckpoint = 10;
-constexpr int dcCheckpoint = 12;     // not used by the mission yet
-constexpr int finalCheckpoint = 13;
+constexpr int firstShootCheckpoint = 4;   // house close, last cross line
+constexpr int turnCheckpoint = 7;         // last cross line on the left line: 180 degree turn, then shooting at house far
+constexpr int dcCheckpoint = 12;          // not used by the mission yet
+constexpr int finalCheckpoint = 13;       // distribution center
 
-// Mission: shooting and revolver
-constexpr int firstShootRpms[] = {90, 60, 110};   // at firstShootCheckpoint
-constexpr int turnShootRpms[] = {150, 130, 100};  // at turnCheckpoint, after the 180 degree turn
-constexpr int servoCheckpointShootRpm = 150;
-constexpr int revolverLoadTurns = 10;             // revolver turns at revolverLoadCheckpoint (the old loop ran 11 times)
-constexpr uint32_t revolverLoadPauseMs = 300;
+// Shot settings for the 12 possible trajectories: 3 houses x 4 balcony heights.
+// Placeholder values - determine them experimentally on the track.
+// Use: shootSequence(shotSettings[HouseClose][2].leftSlide, shotSettings[HouseClose][2].rpm);
+struct ShotSetting
+{
+    bool leftSlide; // switch position: true = left slide, false = right slide
+    int rpm;        // shooter speed in rpm
+};
+
+enum HouseIndex
+{
+    HouseClose = 0,  // right of the field, checkpoints 2-4, closest to the line
+    HouseMedium = 1, // bottom left, checkpoints 5-7, before the turn
+    HouseFar = 2,    // top left, checkpoints 7-9, after the turn, farthest from the line
+    HouseCount = 3
+};
+constexpr int balconyHeightCount = 4; // index 0 = lowest balcony ... 3 = highest balcony
+
+constexpr ShotSetting shotSettings[HouseCount][balconyHeightCount] = {
+    //                      height 0       height 1       height 2       height 3
+    /* HouseClose  */ {{false, 100}, {false, 100}, {false, 100}, {false, 100}},
+    /* HouseMedium */ {{false, 100}, {false, 100}, {false, 100}, {false, 100}},
+    /* HouseFar    */ {{false, 100}, {false, 100}, {false, 100}, {false, 100}},
+};
+
+// Mission: shooting. Each action shoots at one house; the list says which balcony heights (0..3) are shot,
+// one shot per entry in this order. Slide and rpm of each shot come from shotSettings above.
+constexpr HouseIndex firstShootHouse = HouseClose;    // at firstShootCheckpoint
+constexpr int firstShootBalconyHeights[] = {0, 1, 2};
+constexpr HouseIndex turnShootHouse = HouseFar;       // at turnCheckpoint, after the 180 degree turn
+constexpr int turnShootBalconyHeights[] = {0, 1, 2};
 
 // Mission: distribution center (checkpoint 1).
 // The moves are measured from the checkpoint cross line instead of being purely timed:
@@ -109,6 +137,7 @@ constexpr float distributionServoUpDeg = 150.0f;
 constexpr uint32_t distributionBackOffExtraMs = 400;  // back off: until the cross line is left, then this long
 constexpr uint32_t distributionForwardExtraMs = 400;  // forward: until the cross line is reached again, then this long
 constexpr uint32_t distributionReturnExtraMs = 200;   // back: until the cross line is reached again, then this long
+constexpr uint32_t distributionStandStillMs = 3500;   // rule: stand still at the marker for at least 3 s before the flap is triggered
 constexpr uint32_t distributionServoSettleMs = 500;
 constexpr uint32_t distributionFinalWaitMs = 1000;
 constexpr uint32_t crossLineTimeoutMs = 2000;         // a move that does not find the cross line in time stops the run
@@ -123,8 +152,8 @@ constexpr uint32_t checkpointStopPauseMs = 1000;   // pause for "Stop at checkpo
 constexpr bool enableSlideSwitch = false;
 constexpr uint8_t slideSwitchServo = 8;
 constexpr float slideSwitchRangeDeg = 270.0f;      // set to 180 for a 180 degree servo
-constexpr float switchCenterDeg = 135;             // center position of the switch servo
-constexpr float switchOffsetDeg = 15;              // switch travel to each side of the center
+constexpr float switchCenterDeg = 165;             // center position of the switch servo
+constexpr float switchOffsetDeg = 20;              // switch travel to each side of the center
 
 
 #define BLACKLINE_THRESHOLD 300 // Minimum threshold for the center sensor to consider the robot to be centered on. Note that this value depends on supply voltage (ca. 300 for 3V3 and ca. 550 for 5V) and the reflectivity of the surface. If the calibration does not finish, try to lower this threshold.

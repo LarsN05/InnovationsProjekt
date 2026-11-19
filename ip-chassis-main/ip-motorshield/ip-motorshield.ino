@@ -1,7 +1,6 @@
 #include <Arduino.h>
 
 #include <QTRSensors.h>
-
 #include "onboard-led.h"
 #include "config.h"
 #include "src/motorshield/motorshield.h"
@@ -99,6 +98,14 @@ void setup()
   delay(20000);*/
   /*turnUntilPackage();
   delay(20000);*/
+  /*
+  for(int i = 0; i < 10; i++){
+    turnUntilPackage();
+    delay(300);
+  }
+  delay(20000);
+  */
+  shield.motor(revolverMotorNumber).setSpeed(3000);
 
 
 #if ENABLE_WEB_INTERFACE

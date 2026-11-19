@@ -102,12 +102,20 @@ bool driveFromCrossLine(MissionContext &ctx, int speed, CrossLine edge, uint32_t
     return true;
 }
 
+// Shoots once per balcony height at the given house. Slide and rpm of each shot come from shotSettings (config.h).
 template <size_t N>
-bool shootSeries(const int (&rpms)[N])
+bool shootSeries(HouseIndex house, const int (&balconyHeights)[N])
 {
     for (size_t i = 0; i < N; ++i)
     {
-        shootSequence(false, rpms[i]); // a missed shot does not stop the run
+        const int height = balconyHeights[i];
+        if (height < 0 || height >= balconyHeightCount)
+        {
+            Serial.printf("shootSeries: balcony height %d does not exist, shot skipped\n", height);
+            continue;
+        }
+        const ShotSetting &shot = shotSettings[house][height];
+        shootSequence(shot.leftSlide, shot.rpm); // a missed shot does not stop the run
         if (missionAborted())
         {
             return false;
@@ -124,6 +132,10 @@ bool distributionCenterAction(MissionContext &ctx)
 {
     brakeDrive(ctx);
     updateBatteryCompensation();
+
+    // Rule: the robot has to stand still at the marker for at least 3 s before the flap is triggered.
+    if (!missionWait(distributionStandStillMs))
+        return false;
 
     // Back off the cross line, lower the arm, drive forward over the cross line, back again, raise the arm.
     if (!driveFromCrossLine(ctx, -missionDriveSpeed, CrossLine::Leave, distributionBackOffExtraMs))
@@ -144,25 +156,20 @@ bool distributionCenterAction(MissionContext &ctx)
         return false;
 
     arm.setAngle(distributionServoUpDeg);
-    return missionWait(distributionFinalWaitMs);
-}
+    if (!missionWait(distributionFinalWaitMs))
+        return false;
 
-bool loadRevolverAction(MissionContext &ctx)
-{
-    brakeDrive(ctx);
-    for (int i = 0; i < revolverLoadTurns; ++i)
-    {
-        turnUntilPackage(); // a timeout does not stop the run
-        if (!missionWait(revolverLoadPauseMs))
-            return false;
-    }
-    return true;
+    // The return move ends behind the cross line. Drive over it here, so the line following
+    // does not count the distribution center a second time.
+    if (!driveFromCrossLine(ctx, missionDriveSpeed, CrossLine::Reach, 0))
+        return false;
+    return driveFromCrossLine(ctx, missionDriveSpeed, CrossLine::Leave, 0);
 }
 
 bool firstShootAction(MissionContext &ctx)
 {
     brakeDrive(ctx);
-    return shootSeries(firstShootRpms);
+    return shootSeries(firstShootHouse, firstShootBalconyHeights);
 }
 
 bool turnAndShootAction(MissionContext &ctx)
@@ -173,16 +180,14 @@ bool turnAndShootAction(MissionContext &ctx)
     if (!perform180Turn(ctx.qtr, ctx.motorL, ctx.motorR))
         return false; // turn timed out (or Stop): the robot stops
     ctx.pid.reset();
+
+    // After the turn the sensors may still be on the cross line: drive off it before shooting,
+    // so the line following does not count it a second time (does nothing if the robot is already off it).
+    if (!driveFromCrossLine(ctx, missionDriveSpeed, CrossLine::Leave, 0))
+        return false;
     if (!missionWait(200))
         return false;
-    return shootSeries(turnShootRpms);
-}
-
-bool servoCheckpointAction(MissionContext &ctx)
-{
-    brakeDrive(ctx); // previously the robot kept driving at its last speed while shooting
-    const int rpms[] = {servoCheckpointShootRpm};
-    return shootSeries(rpms);
+    return shootSeries(turnShootHouse, turnShootBalconyHeights);
 }
 
 bool finishRunAction(MissionContext &ctx)
@@ -206,10 +211,8 @@ struct CheckpointAction
 
 const CheckpointAction mission[] = {
     {distributionCenter, distributionCenterAction, "distribution center"},
-    {revolverLoadCheckpoint, loadRevolverAction, "load revolver"},
     {firstShootCheckpoint, firstShootAction, "shoot x3"},
     {turnCheckpoint, turnAndShootAction, "180 turn + shoot x3"},
-    {servoCheckpoint, servoCheckpointAction, "shoot x1"},
     {finalCheckpoint, finishRunAction, "finish"},
 };
 

@@ -13,7 +13,7 @@ constexpr uint32_t allignementMs = 500; //constant for the allignement reversal 
 constexpr uint16_t reversalSpeed = 600; //speed for reversal
 constexpr uint32_t allignementTimeOutMs = 3000; // timout for reversal in allignOnCheckpoint
 constexpr uint32_t revolverTimeOutMs = 10000;
-constexpr uint16_t revolverTurnSpeed = 1500;
+constexpr uint16_t revolverTurnSpeed = 2000;
 constexpr float rpmAccuracy = 8; // allowed deviation from the target rpm
 constexpr uint32_t spinUpTimeOutMs = 10000; // maximum time for the motor to reach the target rpm
 constexpr uint32_t rpmStableMs = 300; // the rpm has to stay within rpmAccuracy for this long
@@ -330,11 +330,12 @@ bool turnUntilPackage(){
   bool pakageDetected = false;
   uint32_t startMs = millis();
   while(!pakageDetected && millis() - startMs < revolverTimeOutMs){
-    if(!missionWait(10)) return false; // Stop pressed: abortMission() already braked the revolver
+    if(!missionWait(5)) return false; // Stop pressed: abortMission() already braked the revolver
     pakageDetected = barrierDetected();
   }
   shield.motor(revolverMotorNumber).brake();
   Serial.printf("turnUntilPackage: %s after %lu ms\n", pakageDetected ? "package detected" : "timeout", millis() - startMs);
+  encodedMotorDelay(200);
   return pakageDetected;
 }
 
