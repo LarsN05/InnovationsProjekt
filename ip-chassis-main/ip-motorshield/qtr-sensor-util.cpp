@@ -101,53 +101,7 @@ void calibrateSensors(QTRSensors &qtr, Motor &motorL, Motor &motorR)
         }
     }
 
-    // Fine centering: the coarse return move stops as soon as the middle sensor touches the line,
-    // and the robot overshoots. Turn in short pulses towards the line until it is under the middle sensor.
-    // Same direction rule as the line following PID: position < 2000 -> turn right, > 2000 -> turn left.
-    // Skipped if the middle sensor saw no difference between line and floor during calibration
-    // (sensor bar not working): the robot would otherwise keep turning for the whole timeout.
-    const bool middleSensorCalibrated = qtr.calibrationOn.maximum != nullptr && qtr.calibrationOn.minimum != nullptr &&
-                                        (qtr.calibrationOn.maximum[2] - qtr.calibrationOn.minimum[2]) > 100;
-    if (!middleSensorCalibrated)
-    {
-        Serial.println("Calibration error: the middle sensor did not see a line (min = max). Check the sensor bar power (VCC/GND), CTRL and the signal wires. Centering skipped.");
-        blinkWarningPattern(255, 0, 0, 5);
-    }
-    else
-    {
-        delay(200);
-        const int center = QTR_LINE_MAX_VALUE / 2;
-        const uint32_t centeringStartMs = millis();
-        uint8_t inToleranceReads = 0;
-        while (millis() - centeringStartMs < calibrationCenterTimeoutMs)
-        {
-            const int position = qtr.readLineBlack(sensorValues);
-            const int error = position - center;
-            if (abs(error) < calibrationCenterTolerance)
-            {
-                if (++inToleranceReads >= 3)
-                    break; // stable in the middle
-                delay(calibrationCenterSettleMs);
-                continue;
-            }
-            inToleranceReads = 0;
-            const int dir = (error < 0) ? 1 : -1; // +1 = turn right
-            motorL.setSpeed(dir * calibrationCenterSpeed);
-            motorR.setSpeed(-dir * calibrationCenterSpeed);
-            delay(calibrationCenterPulseMs);
-            motorL.brake();
-            motorR.brake();
-            delay(calibrationCenterSettleMs);
-        }
-        motorL.brake();
-        motorR.brake();
-        if (inToleranceReads < 3)
-        {
-            Serial.println("Calibration warning: could not center the robot on the line (timeout).");
-        }
-    }
-
-    delay(300);
+    delay(1000);
 
     uint16_t finalPosition = qtr.readLineBlack(sensorValues);
     Serial.print("Calibration final position: ");

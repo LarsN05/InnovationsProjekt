@@ -13,6 +13,7 @@ constexpr uint32_t allignementMs = 500; //constant for the allignement reversal 
 constexpr uint16_t reversalSpeed = 600; //speed for reversal
 constexpr uint32_t allignementTimeOutMs = 3000; // timout for reversal in allignOnCheckpoint
 constexpr uint32_t revolverTimeOutMs = 10000;
+constexpr uint16_t revolverTurnSpeed = 2000;
 constexpr float rpmAccuracy = 8; // allowed deviation from the target rpm
 constexpr uint32_t spinUpTimeOutMs = 10000; // maximum time for the motor to reach the target rpm
 constexpr uint32_t rpmStableMs = 300; // the rpm has to stay within rpmAccuracy for this long
@@ -338,9 +339,9 @@ bool turnUntilPackage(){
   return pakageDetected;
 }
 
-bool shootSequence(bool switchRight, int rpm, bool stopShooterAfter){
+bool shootSequence(bool leftSlide, int rpm){
   adjustSpeed(rpm);
-  setSwitch(!switchRight); // only moves the servo if enableSlideSwitch
+  setSwitch(leftSlide);
   uint32_t startMs = millis();
   uint32_t stableSinceMs = startMs;
   bool rpmReached = false;
@@ -356,10 +357,8 @@ bool shootSequence(bool switchRight, int rpm, bool stopShooterAfter){
                 encodedMotorTargetRpmValue(), encodedMotorRpm(), rpmReached ? "rpm reached" : "rpm NOT reached -> revolver not turned");
   //the revolver only turns once the motor runs at the target rpm
   bool success = rpmReached && turnUntilPackage();
-  missionWait(shotFollowThroughMs); // keep the shooter running while the package leaves
-  if(stopShooterAfter){
-    adjustSpeed(0);
-  }
+  missionWait(2000); // keep the shooter running while the package leaves
+  adjustSpeed(0);
   return success && !missionAborted();
 }
 

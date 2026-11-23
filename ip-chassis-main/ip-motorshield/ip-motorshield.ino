@@ -114,7 +114,6 @@ void setup()
   // minimum = 144, 140 
   // maximum = 175, 185
   //setSwitchAngle(140);
-  setSwitchAngle(switchCenterDeg + switchOffsetDeg); // switch to the left slide at startup
 
   // The web interface starts here, before the test below, so it also works while the test runs.
 #if ENABLE_WEB_INTERFACE
