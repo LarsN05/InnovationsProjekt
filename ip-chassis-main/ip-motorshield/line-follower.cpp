@@ -5,6 +5,7 @@
 #include "movement-functions.h"
 #include "mission.h"
 #include "onboard-led.h"
+#include "buzzer.h"
 
 float calculatePIDstep(PIDController &pid, float measurement)
 {
@@ -176,6 +177,10 @@ void drivingLoop(PIDController &pid, QTRSensors &qtr, Motor &motorL, Motor &moto
             abortMission();
             robotMotionEnabled = false;
             Serial.printf("Checkpoint %d: action failed, robot stopped\n", checkpointCounter);
+            if (enableMissionSounds)
+            {
+                playSound(Sound::Error);
+            }
             blinkWarningPattern(255, 0, 0, 10);
         }
     }

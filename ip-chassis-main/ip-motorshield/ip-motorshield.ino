@@ -9,6 +9,7 @@
 #include "line-follower.h"
 #include "shared-globals.h"
 #include "movement-functions.h"
+#include "buzzer.h"
 #if ENABLE_WEB_INTERFACE
 #include "web-interface.h"
 #endif
@@ -51,6 +52,7 @@ void maybeBlinkForBatteryLowVoltageWarning()
   else if (batteryVoltageV < batteryWarn20PercentV)
   {
     Serial.println("Battery warning: below 20%, blinking red 5x.");
+    playSound(Sound::BatteryLow);
     blinkWarningPattern(128, 0, 0, 5);
   }
   else if (batteryVoltageV < batteryWarn40PercentV)
@@ -76,6 +78,7 @@ void setup()
 
   initEncodedMotor();
   initBarrierSensor();
+  initBuzzer(); // after shield.begin(): the drive motor PWM must already own its LEDC timer
   shield.motor(driveMotorLeft).setInverted(invertDriveMotors);
   shield.motor(driveMotorRight).setInverted(invertDriveMotors);
 
@@ -100,11 +103,87 @@ void setup()
   /*turnUntilPackage();
   delay(20000);*/
 
+  //code to directly test:
+  // minimum = 144, 140 
+  // maximum = 175, 185
+  //setSwitchAngle(140);
 
+  // The web interface starts here, before the test below, so it also works while the test runs.
 #if ENABLE_WEB_INTERFACE
   initWebInterface(pid, &shield);
   xTaskCreatePinnedToCore(webInterfaceTask, "webInterface", 8192, nullptr, 1, nullptr, 0);
 #endif
+
+  // Revolver + barrier sensor test: the revolver turns, stops for 0.5 s whenever a cube reaches the
+  // barrier sensor, then keeps turning. Runs forever: calibration and line following never start.
+  // With the web interface on, the revolver only turns after "Start Moving" and stops on "Stop Moving";
+  // the barrier value is also shown in the web interface telemetry.
+  // Set to 0 to disable.
+#if 1
+  {
+    constexpr int testSpeed = 1500;            // revolver PWM (-4095..4095); set to 0 to only read the sensor (hold a cube in front by hand)
+    constexpr uint32_t testStopMs = 500;       // stop time per cube
+    bool cubeInFront = false;                  // true while the current cube is still in front of the sensor
+    uint32_t cubeCount = 0;
+    uint32_t lastPrintMs = 0;
+    uint16_t windowMin = UINT16_MAX;
+    uint16_t windowMax = 0;
+
+    Serial.printf("Revolver test: speed %d, barrier threshold %u us\n", testSpeed, barrierThreshold);
+#if !ENABLE_WEB_INTERFACE
+    robotMotionEnabled = true; // no web interface: start right away
+#endif
+    bool turning = false;
+    for (;;)
+    {
+      const uint16_t value = readBarrierSensor();
+      const bool detected = value < barrierThreshold;
+
+      // Start / Stop from the web interface
+      if (robotMotionEnabled != turning)
+      {
+        turning = robotMotionEnabled;
+        if (turning)
+          shield.motor(revolverMotorNumber).setSpeed(testSpeed);
+        else
+          shield.motor(revolverMotorNumber).brake();
+        Serial.printf("Revolver test: %s\n", turning ? "started" : "stopped");
+      }
+
+      if (turning && detected && !cubeInFront)
+      {
+        // New cube: stop, wait, continue
+        cubeInFront = true;
+        ++cubeCount;
+        shield.motor(revolverMotorNumber).brake();
+        Serial.printf("Cube %lu detected (%u us), stopping %lu ms\n", (unsigned long)cubeCount, value, (unsigned long)testStopMs);
+        encodedMotorDelay(testStopMs);
+        if (robotMotionEnabled)
+          shield.motor(revolverMotorNumber).setSpeed(testSpeed);
+      }
+      else if (!detected)
+      {
+        cubeInFront = false; // sensor is clear again: the next detection is a new cube
+      }
+
+      // Sensor values for finding barrierThreshold: every 100 ms the lowest / highest reading of that window,
+      // so a cube passing quickly is not missed. Small value = something in front of the sensor.
+      if (value < windowMin) windowMin = value;
+      if (value > windowMax) windowMax = value;
+      if (millis() - lastPrintMs >= 100)
+      {
+        lastPrintMs = millis();
+        Serial.printf("Barrier sensor: now %4u us   min %4u   max %4u   threshold %u %s\n",
+                      value, windowMin, windowMax, barrierThreshold, detected ? "<- CUBE" : "");
+        windowMin = UINT16_MAX;
+        windowMax = 0;
+      }
+      encodedMotorDelay(5);
+    }
+  }
+#endif
+
+
 
   qtr.setTypeRC();
   qtr.setSensorPins(QTR_SENSOR_PINS, QTR_SENSOR_COUNT);
@@ -131,8 +210,9 @@ void setup()
 #endif
 
   clearOnboardLed();
+  playSound(Sound::Startup);
 }
-//asjdklfökj
+
 void loop()
 {
   blinkPeriodically();
@@ -184,5 +264,7 @@ void loop()
       driveLoopCounter = 0;
       driveLoopWindowStartMs = nowMs;
     }
+
+
   }
 }

@@ -363,6 +363,8 @@ bool shootSequence(bool leftSlide, int rpm){
 
 // Moves the switch servo to an absolute angle. Works even while enableSlideSwitch is false
 // (used by the web interface buttons to test the servo and find the right angles).
+// minimum = 144, 140
+// maximum = 175, 185
 float setSwitchAngle(float deg){
   deg = constrain(deg, 0.0f, slideSwitchRangeDeg);
   ShieldServo &switchServo = shield.servo(slideSwitchServo);

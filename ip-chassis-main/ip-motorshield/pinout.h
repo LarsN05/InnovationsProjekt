@@ -36,8 +36,21 @@
 #define MOTOR_6_B_CHANNEL (1)
 
 // --- TT motor encoder (uses the free SPI pins) ---
+// Encoder cable colours:
+//   red    -> encoder A   -> SPI header CS   (GPIO 10)
+//   white  -> encoder B   -> SPI header MOSI (GPIO 11)
+//   yellow -> encoder VCC -> 3V3 (never 5 V: the ESP32 inputs only tolerate 3.3 V)
+//   black  -> encoder GND -> GND
+// The two motor wires go to motor output M6 (encodedMotorNumber in config.h).
 #define ENCODER_A_PIN (10) // red
 #define ENCODER_B_PIN (11) // white
+
+// --- Passive piezo buzzer (uses the free SPI SCK pin) ---
+// Buzzer leg 1 -> SPI header SCK (GPIO 12).
+// Buzzer leg 2 -> SPI header MISO (GPIO 13) for maximum volume (push-pull, enableBuzzerPushPull in config.h),
+//               or -> GND if enableBuzzerPushPull is false. Piezo: no polarity.
+#define BUZZER_PIN (12)
+#define BUZZER_PIN_2 (13)
 
 // --- QTR-HD-01RC reflectance sensor for the barrier (CTRL left open: emitter always on) ---
 #define BARRIER_SENSOR_PIN (14)

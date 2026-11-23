@@ -5,6 +5,7 @@
 #include "shared-globals.h"
 #include "web-page.h"
 #include "movement-functions.h"
+#include "buzzer.h"
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -319,6 +320,8 @@ void applyWebCommand(const char *payload, uint8_t clientNum)
     if (strncmp(payload, "command=start", 13) == 0)
     {
         robotMotionEnabled = true;
+        if (enableMissionSounds)
+            playSound(Sound::Start);
         webSocketServer.sendTXT(clientNum, "status=moving");
         return;
     }
@@ -327,6 +330,8 @@ void applyWebCommand(const char *payload, uint8_t clientNum)
     {
         robotMotionEnabled = false; // a running checkpoint action notices this within a few ms (missionWait)
         adjustSpeed(0);             // also stops the shooter (e.g. after an encoder motor test)
+        if (enableMissionSounds)
+            playSound(Sound::Stop);
         webSocketServer.sendTXT(clientNum, "status=stopped");
         return;
     }
@@ -345,6 +350,30 @@ void applyWebCommand(const char *payload, uint8_t clientNum)
         snprintf(reply, sizeof(reply), "status=checkpoint=%d", checkpointCounter);
         webSocketServer.sendTXT(clientNum, reply);
         Serial.printf("Checkpoint counter set to %d\n", checkpointCounter);
+        return;
+    }
+
+    // Buzzer: command=sound=<name> (names in buzzer.cpp) or command=sound=off
+    if (strncmp(payload, "command=sound=", 14) == 0)
+    {
+        const char *name = payload + 14;
+        Sound sound;
+        char reply[48];
+        if (strcmp(name, "off") == 0)
+        {
+            stopSound();
+            snprintf(reply, sizeof(reply), "status=sound=off");
+        }
+        else if (soundFromName(name, sound))
+        {
+            playSound(sound);
+            snprintf(reply, sizeof(reply), "status=sound=%s", soundName(sound));
+        }
+        else
+        {
+            snprintf(reply, sizeof(reply), "status=sound=unknown");
+        }
+        webSocketServer.sendTXT(clientNum, reply);
         return;
     }
 

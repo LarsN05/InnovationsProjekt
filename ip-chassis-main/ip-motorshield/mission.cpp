@@ -6,6 +6,7 @@
 #include "src/motorshield/motorshield.h"
 #include "qtr-sensor-util.h"
 #include "onboard-led.h"
+#include "buzzer.h"
 
 #include <Arduino.h>
 
@@ -122,29 +123,32 @@ bool shootSeries(const int (&rpms)[N])
 
 bool distributionCenterAction(MissionContext &ctx)
 {
+    // 1. Stop on the cross line and wait
     brakeDrive(ctx);
+    if (!missionWait(distributionStartWaitMs))
+        return false;
     updateBatteryCompensation();
 
-    // Back off the cross line, lower the arm, drive forward over the cross line, back again, raise the arm.
+    // 2. Back off the cross line
     if (!driveFromCrossLine(ctx, -missionDriveSpeed, CrossLine::Leave, distributionBackOffExtraMs))
         return false;
 
+    // 3. Extend the arm
     ShieldServo &arm = shield.servo(distributionServo);
     arm.setAngleRange(distributionServoRangeDeg);
     arm.setAngle(distributionServoDownDeg);
     if (!missionWait(distributionServoSettleMs))
         return false;
 
+    // 4. Drive forward over the cross line with the arm extended, so the cubes fall
     if (!driveFromCrossLine(ctx, missionDriveSpeed, CrossLine::Reach, distributionForwardExtraMs))
         return false;
-    if (!missionWait(distributionServoSettleMs))
+    if (!missionWait(distributionDropWaitMs))
         return false;
 
-    if (!driveFromCrossLine(ctx, -missionDriveSpeed, CrossLine::Reach, distributionReturnExtraMs))
-        return false;
-
+    // 5. Retract the arm, then line following continues to the next checkpoint
     arm.setAngle(distributionServoUpDeg);
-    return missionWait(distributionFinalWaitMs);
+    return missionWait(distributionServoSettleMs);
 }
 
 bool loadRevolverAction(MissionContext &ctx)
@@ -202,15 +206,16 @@ struct CheckpointAction
     int checkpoint;
     bool (*run)(MissionContext &);
     const char *name;
+    Sound sound; // played when the action starts (if enableMissionSounds)
 };
 
 const CheckpointAction mission[] = {
-    {distributionCenter, distributionCenterAction, "distribution center"},
-    {revolverLoadCheckpoint, loadRevolverAction, "load revolver"},
-    {firstShootCheckpoint, firstShootAction, "shoot x3"},
-    {turnCheckpoint, turnAndShootAction, "180 turn + shoot x3"},
-    {servoCheckpoint, servoCheckpointAction, "shoot x1"},
-    {finalCheckpoint, finishRunAction, "finish"},
+    {distributionCenter, distributionCenterAction, "distribution center", Sound::Distribution},
+    {revolverLoadCheckpoint, loadRevolverAction, "load revolver", Sound::RevolverLoad},
+    {firstShootCheckpoint, firstShootAction, "shoot x3", Sound::Checkpoint},
+    {turnCheckpoint, turnAndShootAction, "180 turn + shoot x3", Sound::Turn},
+    {servoCheckpoint, servoCheckpointAction, "shoot x1", Sound::Checkpoint},
+    {finalCheckpoint, finishRunAction, "finish", Sound::Finish},
 };
 
 } // namespace
@@ -259,6 +264,10 @@ bool runCheckpointAction(int checkpointNumber, MissionContext &ctx)
     }
 
     Serial.printf("Checkpoint %d%s%s\n", checkpointNumber, action ? ": " : "", action ? action->name : "");
+    if (enableMissionSounds)
+    {
+        playSound(action ? action->sound : Sound::Checkpoint);
+    }
 
     if (stopAtCheckpoints)
     {
