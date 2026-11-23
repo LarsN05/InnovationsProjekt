@@ -159,7 +159,10 @@ void drivingLoop(PIDController &pid, QTRSensors &qtr, Motor &motorL, Motor &moto
     controlSignal = calculatePIDstep(pid, position);
     setMotorSpeeds(controlSignal, motorL, motorR);
 
-    const bool lockoutOver = (millis() - (uint32_t)lastCheckpointTimeMs) >= checkpointLockoutMs;
+    // The lockout starts when the checkpoint action has finished (not when the cross line was seen),
+    // so a cross line the robot is still on or drives over right after a manoeuvre (e.g. the 180 turn) is not counted again.
+    static uint32_t checkpointLockoutStartMs = 0;
+    const bool lockoutOver = (millis() - checkpointLockoutStartMs) >= checkpointLockoutMs;
     if (crossLineConfirmed && lockoutOver)
     {
         checkpointCounter++;
@@ -167,6 +170,7 @@ void drivingLoop(PIDController &pid, QTRSensors &qtr, Motor &motorL, Motor &moto
 
         MissionContext ctx{pid, qtr, motorL, motorR};
         const bool ok = runCheckpointAction(checkpointCounter, ctx);
+        checkpointLockoutStartMs = millis();
 
         if (!robotMotionEnabled)
         {

@@ -82,22 +82,69 @@ constexpr uint8_t checkpointConfirmReads = 2;  // consecutive all-black drive-lo
 constexpr uint32_t checkpointLockoutMs = 600;  // after a checkpoint, further cross lines are ignored for this long (filters double counts)
 
 // Mission: checkpoint numbers. What happens at each one is listed in the table in mission.cpp.
-// Each number is a real cross line on the track. The distribution center now ends in front of
-// its cross line, so it no longer counts that line a second time (the old numbers were all +1).
+// Track: Wettbewerbsstrecke 2026. Each cross line counts once. The cannon shoots to the LEFT of the robot.
+//  1      distribution center (DS)
+//  2-4    Haus 1: bottom line, robot drives east, house on its left
+//  5-7    Haus 2: top line, robot drives north, house on its left | 180 degree turn at 7
+//  7-9    Haus 3: same line after the turn, robot drives south, house on its left (7 = shot right after the turn)
+//  10-12  Haus 1 again, now on the right: the cannon cannot reach it, no shots
+//  13     distribution center = finish
 constexpr int distributionCenter = 1;
-constexpr int revolverLoadCheckpoint = 3;
-constexpr int firstShootCheckpoint = 4;
-constexpr int turnCheckpoint = 7;    // 180 degree turn + shooting
-constexpr int servoCheckpoint = 9;
-constexpr int dcCheckpoint = 11;     // not used by the mission yet
-constexpr int finalCheckpoint = 12;
+constexpr int turnCheckpoint = 7;         // top cross line: shoot Haus 2, 180 degree turn, shoot Haus 3
+constexpr int dcCheckpoint = 12;          // not used by the mission yet
+constexpr int finalCheckpoint = 13;       // distribution center
 
-// Mission: shooting and revolver
-constexpr int firstShootRpms[] = {90, 60, 110};   // at firstShootCheckpoint
-constexpr int turnShootRpms[] = {150, 130, 100};  // at turnCheckpoint, after the 180 degree turn
-constexpr int servoCheckpointShootRpm = 150;
-constexpr int revolverLoadTurns = 10;             // revolver turns at revolverLoadCheckpoint
-constexpr uint32_t revolverLoadPauseMs = 300;
+// Shot settings for the 12 possible trajectories: 3 houses x 4 balcony heights.
+// Placeholder values - determine them experimentally on the track.
+struct ShotSetting
+{
+    bool leftSlide; // switch position: true = left slide, false = right slide (only used if enableSlideSwitch)
+    int rpm;        // shooter speed in rpm
+};
+
+enum HouseIndex
+{
+    HouseClose = 0,  // Haus 1: next to the bottom line, checkpoints 2-4
+    HouseMedium = 1, // Haus 2: left of the top line, checkpoints 5-7 before the turn
+    HouseFar = 2,    // Haus 3: right of the top line, checkpoints 7-9 after the turn, farthest from the line
+    HouseCount = 3
+};
+constexpr int balconyHeightCount = 4; // index 0 = lowest balcony ... 3 = highest balcony
+
+constexpr ShotSetting shotSettings[HouseCount][balconyHeightCount] = {
+    //                      height 0       height 1       height 2       height 3
+    /* HouseClose  */ {{false, 100}, {false, 100}, {false, 100}, {false, 100}},
+    /* HouseMedium */ {{false, 100}, {false, 100}, {false, 100}, {false, 100}},
+    /* HouseFar    */ {{false, 100}, {false, 100}, {false, 100}, {false, 100}},
+};
+
+// Shooting plan: one line per shot. At every cross line listed here the robot stops and fires these shots
+// in order (several lines with the same checkpoint = several shots there). Slide and rpm come from shotSettings.
+// Each cross line faces one balcony of its house; balconyHeight says which balcony that is.
+// afterTurn is only relevant at turnCheckpoint: false = before the 180 turn (Haus 2), true = after it (Haus 3).
+// The balcony heights below are placeholders - set them to the balcony each cross line actually faces.
+struct PlannedShot
+{
+    int checkpoint;
+    bool afterTurn;
+    HouseIndex house;
+    int balconyHeight; // 0..balconyHeightCount-1
+};
+
+constexpr PlannedShot shotPlan[] = {
+    // Haus 1 (bottom line, driving east)
+    {2, false, HouseClose, 0},
+    {3, false, HouseClose, 1},
+    {4, false, HouseClose, 2},
+    // Haus 2 (top line, driving north)
+    {5, false, HouseMedium, 0},
+    {6, false, HouseMedium, 1},
+    {7, false, HouseMedium, 2},
+    // Haus 3 (top line after the 180 turn, driving south)
+    {7, true, HouseFar, 2},
+    {8, true, HouseFar, 1},
+    {9, true, HouseFar, 0},
+};
 
 // Mission: distribution center (checkpoint 1).
 // Sequence: stop on the cross line, wait, back off, extend the arm, drive forward (cubes fall), retract the arm, continue.
@@ -109,7 +156,7 @@ constexpr uint8_t distributionServo = 1;
 constexpr float distributionServoRangeDeg = 270.0f;
 constexpr float distributionServoDownDeg = 0.0f;
 constexpr float distributionServoUpDeg = 150.0f;
-constexpr uint32_t distributionStartWaitMs = 3000;    // wait on the cross line before the sequence starts
+constexpr uint32_t distributionStandStillMs = 3500;   // rule: stand still at the marker for at least 3 s before the flap is triggered
 constexpr uint32_t distributionBackOffExtraMs = 400;  // back off: until the cross line is left, then this long
 constexpr uint32_t distributionForwardExtraMs = 400;  // forward with the arm extended: until the cross line is reached again, then this long
 constexpr uint32_t distributionServoSettleMs = 500;   // time for the arm to move

@@ -1,7 +1,6 @@
 #include <Arduino.h>
 
 #include <QTRSensors.h>
-
 #include "onboard-led.h"
 #include "config.h"
 #include "src/motorshield/motorshield.h"
@@ -102,6 +101,14 @@ void setup()
   delay(20000);*/
   /*turnUntilPackage();
   delay(20000);*/
+  /*
+  for(int i = 0; i < 10; i++){
+    turnUntilPackage();
+    delay(300);
+  }
+  delay(20000);
+  */
+  //shield.motor(revolverMotorNumber).setSpeed(3000); // revolver test: would keep the revolver spinning during the whole run
 
   //code to directly test:
   // minimum = 144, 140 
@@ -118,8 +125,8 @@ void setup()
   // barrier sensor, then keeps turning. Runs forever: calibration and line following never start.
   // With the web interface on, the revolver only turns after "Start Moving" and stops on "Stop Moving";
   // the barrier value is also shown in the web interface telemetry.
-  // Set to 0 to disable.
-#if 1
+  // Set to 1 to enable (blocks the mission).
+#if 0
   {
     constexpr int testSpeed = 1500;            // revolver PWM (-4095..4095); set to 0 to only read the sensor (hold a cube in front by hand)
     constexpr uint32_t testStopMs = 500;       // stop time per cube
