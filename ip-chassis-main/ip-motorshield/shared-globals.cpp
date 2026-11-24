@@ -20,6 +20,10 @@ int lastCheckpointTimeMs = 0;
 
 bool stopAtCheckpoints = false;
 bool robotMotionEnabled = false;
+volatile bool testShotRequested = false;
+volatile bool testShotActive = false;
+volatile int testShotRpm = 0;
+volatile bool testShotRight = false;
 bool brakeWhenStopped = false;
 
 bool enableSupplyAndM1M2CurrentMonitoring = false;

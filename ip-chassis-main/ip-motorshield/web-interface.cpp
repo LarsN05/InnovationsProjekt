@@ -329,6 +329,8 @@ void applyWebCommand(const char *payload, uint8_t clientNum)
     if (strncmp(payload, "command=stop", 12) == 0)
     {
         robotMotionEnabled = false; // a running checkpoint action notices this within a few ms (missionWait)
+        testShotRequested = false;  // also cancels a waiting or running test shot
+        testShotActive = false;
         adjustSpeed(0);             // also stops the shooter (e.g. after an encoder motor test)
         if (enableMissionSounds)
             playSound(Sound::Stop);
@@ -394,6 +396,27 @@ void applyWebCommand(const char *payload, uint8_t clientNum)
         snprintf(reply, sizeof(reply), "status=switch=%.1f", switchDeg);
         webSocketServer.sendTXT(clientNum, reply);
         Serial.printf("Switch servo set to %.1f deg\n", switchDeg);
+        return;
+    }
+
+    // Test shot: command=test_shot=<rpm>,<0 = left slide | 1 = right slide>. Only while the robot stands still.
+    int shotRpm = 0;
+    int shotRight = 0;
+    if (sscanf(payload, "command=test_shot=%d,%d", &shotRpm, &shotRight) == 2)
+    {
+        const char *reply = "status=test_shot=started";
+        if (robotMotionEnabled)
+            reply = "status=test_shot=refused (robot is moving, press Stop first)";
+        else if (testShotRequested || testShotActive)
+            reply = "status=test_shot=refused (a test shot is already running)";
+        else
+        {
+            testShotRpm = shotRpm;
+            testShotRight = shotRight != 0;
+            testShotRequested = true; // loop() runs it
+            Serial.printf("Test shot requested: %d rpm, %s slide\n", shotRpm, shotRight ? "right" : "left");
+        }
+        webSocketServer.sendTXT(clientNum, reply);
         return;
     }
 

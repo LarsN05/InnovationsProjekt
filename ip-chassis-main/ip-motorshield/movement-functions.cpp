@@ -18,7 +18,7 @@ constexpr uint32_t spinUpTimeOutMs = 10000; // maximum time for the motor to rea
 constexpr uint32_t rpmStableMs = 300; // the rpm has to stay within rpmAccuracy for this long
 
 bool missionAborted(){
-  return !robotMotionEnabled;
+  return !robotMotionEnabled && !testShotActive; // a web test shot runs while the robot stands still
 }
 
 void abortMission(){
