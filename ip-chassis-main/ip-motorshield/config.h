@@ -152,7 +152,7 @@ constexpr int shotDriveSpeed = 800;
 // move: what the robot does before the row:
 //   Stay          shoot where the robot stands
 //   FollowLine    follow the line for thirdBalconyDriveMs
-//   TurnRight     turn right on the spot by about 25 degrees (rowTurnMs), shoot, turn back
+//   TurnRight     turn right on the spot by about 20 degrees (rowTurnMs), shoot, turn back
 enum class RowMove
 {
     Stay,
@@ -184,9 +184,9 @@ constexpr RowStop shotPlan[] = {
     {8, false, HouseFar, 2, RowMove::FollowLine},
 };
 
-// RowMove::TurnRight: spin on the spot for this long (about 25 degrees - tune on the track), then turn back
+// RowMove::TurnRight: spin on the spot for this long (about 20 degrees - tune on the track), then turn back
 // the same time after the row. Right = the cannon (on the left side) swings towards the front.
-constexpr uint32_t rowTurnMs = 300;
+constexpr uint32_t rowTurnMs = 240;
 constexpr int rowTurnSpeed = 900;
 
 // After the 180 turn: the robot drives forward (with line steering) until the sensors see the middle cross line.
