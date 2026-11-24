@@ -13,7 +13,7 @@ constexpr uint32_t allignementMs = 500; //constant for the allignement reversal 
 constexpr uint16_t reversalSpeed = 600; //speed for reversal
 constexpr uint32_t allignementTimeOutMs = 3000; // timout for reversal in allignOnCheckpoint
 constexpr uint32_t revolverTimeOutMs = 10000;
-constexpr float rpmAccuracy = 8; // allowed deviation from the target rpm
+constexpr float rpmAccuracy = 4; // allowed deviation from the target rpm
 constexpr uint32_t spinUpTimeOutMs = 10000; // maximum time for the motor to reach the target rpm
 constexpr uint32_t rpmStableMs = 300; // the rpm has to stay within rpmAccuracy for this long
 
