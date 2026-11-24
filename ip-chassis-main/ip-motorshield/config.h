@@ -125,19 +125,19 @@ constexpr Shot shots[HouseCount][balconyRowCount][maxShotsPerRow] = {
     // Haus 1           shot 1         shot 2         shot 3         shot 4
     {
         /* row 1 */ {{70, false}, {90, false}, {100, true}, {0, false}},
-        /* row 2 */ {{120, true}, {120, true}, {120, true}, {120, true}},
+        /* row 2 */ {{70, false}, {90, false}, {100, true}, {120, true}},
         /* row 3 */ {{70, false}, {90, false}, {100, true}, {0, false}},
     },
     // Haus 2
     {
         /* row 1 */ {{70, false}, {90, false}, {100, true}, {0, false}},
-        /* row 2 */ {{120, true}, {120, true}, {120, true}, {120, true}},
+        /* row 2 */ {{70, false}, {90, false}, {100, true}, {120, true}},
         /* row 3 */ {{70, false}, {90, false}, {100, true}, {0, false}},
     },
     // Haus 3
     {
         /* row 1 */ {{70, false}, {90, false}, {100, true}, {0, false}},
-        /* row 2 */ {{120, true}, {120, true}, {120, true}, {120, true}},
+        /* row 2 */ {{70, false}, {90, false}, {100, true}, {120, true}},
         /* row 3 */ {{70, false}, {90, false}, {100, true}, {0, false}},
     },
 };
