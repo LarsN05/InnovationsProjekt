@@ -202,6 +202,9 @@ constexpr int revolverTurnSpeed = 1500;   // original value; max 4095
 // After each shot the shooter keeps this rpm until the cube has left, then goes straight to the next shot's rpm.
 // The shooter only stops after the last shot of the run (keeps its momentum between rows and houses).
 constexpr uint32_t shotFollowThroughMs = 2000;
+// If a shot's exact rpm is not reached within the spin-up timeout, the cube is still fired as long as the
+// shooter runs steadily above this rpm (otherwise that shot is skipped).
+constexpr float minShotRpm = 65.0f;
 
 // Mission: distribution center (checkpoint 1).
 // Sequence: stop on the cross line, wait, back off, extend the arm, drive forward (triggers the DS),

@@ -342,20 +342,29 @@ bool shootSequence(bool switchRight, int rpm, bool stopShooterAfter){
   adjustSpeed(rpm);
   setSwitch(!switchRight); // only moves the servo if enableSlideSwitch
   uint32_t startMs = millis();
-  uint32_t stableSinceMs = startMs;
+  uint32_t stableSinceMs = startMs;      // since when the rpm is within rpmAccuracy of the target
+  uint32_t aboveMinSinceMs = startMs;    // since when the rpm is above minShotRpm
   bool rpmReached = false;
   //wait until the rpm stays close to the target for rpmStableMs
   while(!rpmReached && millis() - startMs < spinUpTimeOutMs){
     if(!missionWait(10)) return false; // Stop pressed: abortMission() already stopped the shooter
-    if(fabs(encodedMotorTargetRpmValue() - encodedMotorRpm()) > rpmAccuracy){
+    const float measured = encodedMotorRpm();
+    if(fabs(encodedMotorTargetRpmValue() - measured) > rpmAccuracy){
       stableSinceMs = millis();
+    }
+    if(fabs(measured) < minShotRpm){
+      aboveMinSinceMs = millis();
     }
     rpmReached = millis() - stableSinceMs >= rpmStableMs;
   }
+  //exact rpm not reached in time: still shoot if the shooter runs steadily above minShotRpm
+  const bool aboveMinimum = millis() - aboveMinSinceMs >= rpmStableMs;
+  const bool fire = rpmReached || aboveMinimum;
   Serial.printf("shootSequence: target %.0f rpm, measured %.1f rpm, %s\n",
-                encodedMotorTargetRpmValue(), encodedMotorRpm(), rpmReached ? "rpm reached" : "rpm NOT reached -> revolver not turned");
-  //the revolver only turns once the motor runs at the target rpm
-  bool success = rpmReached && turnUntilPackage();
+                encodedMotorTargetRpmValue(), encodedMotorRpm(),
+                rpmReached ? "rpm reached" : (aboveMinimum ? "rpm NOT reached, but above minimum -> shooting anyway"
+                                                           : "rpm NOT reached and below minimum -> shot skipped"));
+  bool success = fire && turnUntilPackage();
   missionWait(shotFollowThroughMs); // keep the shooter running while the package leaves
   if(stopShooterAfter){
     adjustSpeed(0);
