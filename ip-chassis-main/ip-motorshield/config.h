@@ -3,11 +3,11 @@
 
 // Set to 1 to enable the WiFi web interface for live telemetry and remote control.
 // Set to 0 for standalone mode: the robot auto-starts after calibration with no WiFi.
-#define ENABLE_WEB_INTERFACE 1
+#define ENABLE_WEB_INTERFACE 0
 
 // Set to 1 to test the encoder motor: skips the sensor calibration and the line following,
 // the robot does not drive. Set the motor rpm live in the web interface ("Encoder motor test").
-#define ENCODER_MOTOR_TEST_MODE 1
+#define ENCODER_MOTOR_TEST_MODE 0
 
 // Set to 1 to test allignOnCheckpoint() alone: the robot follows the line normally, but at EVERY
 // cross line it only runs the alignment (no mission actions) and then stops. Results go to Serial.
@@ -124,21 +124,21 @@ struct Shot
 constexpr Shot shots[HouseCount][balconyRowCount][maxShotsPerRow] = {
     // Haus 1           shot 1         shot 2         shot 3         shot 4
     {
-        /* row 1 */ {{70, false}, {90, false}, {100, true}, {0, false}},
-        /* row 2 */ {{70, false}, {90, false}, {100, true}, {120, true}},
-        /* row 3 */ {{70, false}, {90, false}, {100, true}, {0, false}},
+        /* row 1 */ {{70, false}, {95, false}, {108, true}, {0, false}},
+        /* row 2 */ {{70, false}, {95, false}, {108, true}, {115, true}},
+        /* row 3 */ {{70, false}, {95, false}, {108, true}, {0, false}},
     },
     // Haus 2
     {
-        /* row 1 */ {{70, false}, {90, false}, {100, true}, {0, false}},
-        /* row 2 */ {{70, false}, {90, false}, {100, true}, {120, true}},
-        /* row 3 */ {{70, false}, {90, false}, {100, true}, {0, false}},
+        /* row 1 */ {{100, false}, {110, false}, {125, true}, {0, false}},
+        /* row 2 */ {{100, false}, {110, false}, {125, true}, {130, true}},
+        /* row 3 */ {{100, false}, {110, false}, {125, true}, {0, false}},
     },
     // Haus 3
     {
-        /* row 1 */ {{70, false}, {90, false}, {100, true}, {0, false}},
-        /* row 2 */ {{70, false}, {90, false}, {100, true}, {120, true}},
-        /* row 3 */ {{70, false}, {90, false}, {100, true}, {0, false}},
+        /* row 1 */ {{115, false}, {130, false}, {145, true}, {0, false}},
+        /* row 2 */ {{115, false}, {130, false}, {145, true}, {150, true}},
+        /* row 3 */ {{115, false}, {130, false}, {145, true}, {0, false}},
     },
 };
 
