@@ -369,9 +369,8 @@ bool turnAndShootAction(MissionContext &ctx)
 
 bool finishRunAction(MissionContext &ctx)
 {
-    adjustSpeed(0); // shooter off (it normally already stopped after the last shot)
-    allignOnCheckpoint(ctx.pid, ctx.qtr, ctx.motorL, ctx.motorR);
-    brakeDrive(ctx);
+    brakeDrive(ctx); // stop right where the finish line was detected (no alignment)
+    adjustSpeed(0);  // shooter off (it normally already stopped after the last shot)
     robotMotionEnabled = false; // run complete
     return true;
 }
