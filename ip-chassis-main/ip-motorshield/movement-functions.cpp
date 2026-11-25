@@ -13,6 +13,7 @@ constexpr uint32_t allignementMs = 500; //constant for the allignement reversal 
 constexpr uint16_t reversalSpeed = 600; //speed for reversal
 constexpr uint32_t allignementTimeOutMs = 3000; // timout for reversal in allignOnCheckpoint
 constexpr uint32_t revolverTimeOutMs = 10000;
+constexpr uint32_t revolverBlockedTimeOutMs = 3000; // sensor already blocked at the start (package stuck): give up if it does not clear within this time
 constexpr float rpmAccuracy = 4; // allowed deviation from the target rpm
 constexpr uint32_t spinUpTimeOutMs = 10000; // maximum time for the motor to reach the target rpm
 constexpr uint32_t rpmStableMs = 300; // the rpm has to stay within rpmAccuracy for this long
@@ -113,9 +114,82 @@ bool perform180Turn(QTRSensors &qtr, Motor &motorL, Motor &motorR){
 
     if(!turnSuccess){
       Serial.println("180-turn error");
+      return false;
     }
-    
-    return turnSuccess;
+
+    //the fast turn overshoots: center the line under the middle sensor
+    if(!missionWait(100)) return false;
+    centerOnLine(qtr, motorL, motorR);
+    if(missionAborted()) return false; // a centering timeout alone does not stop the run
+
+    return true;
+}
+
+bool centerOnLine(QTRSensors &qtr, Motor &motorL, Motor &motorR){
+  uint16_t sensorValues[QTR_SENSOR_COUNT];
+  const int center = (QTR_SENSOR_COUNT - 1) * 500; // 2000 with 5 sensors
+  const uint32_t startMs = millis();
+  uint8_t centeredReads = 0;
+  updateBatteryCompensation();
+  const int speed = compensateForBattery(centerTurnSpeed);
+
+  while(millis() - startMs < centerTimeOutMs){
+    const int position = qtr.readLineBlack(sensorValues);
+    const int error = position - center; // > 0: line is on the left side (sensor 4)
+    if(abs(error) <= centerTolerance){
+      if(++centeredReads >= 3){
+        Serial.printf("centerOnLine: centered (position %d) after %lu ms\n", position, millis() - startMs);
+        return true;
+      }
+      if(!missionWait(20)) return false;
+      continue;
+    }
+    centeredReads = 0;
+    //short pulse towards the line, then brake and let the robot settle before the next reading
+    if(error > 0){
+      motorL.setSpeed(-speed);
+      motorR.setSpeed(speed);
+    }
+    else{
+      motorL.setSpeed(speed);
+      motorR.setSpeed(-speed);
+    }
+    if(!missionWait(centerPulseMs)) return false;
+    motorL.brake();
+    motorR.brake();
+    if(!missionWait(40)) return false;
+  }
+  motorL.brake();
+  motorR.brake();
+  Serial.println("centerOnLine: timeout, not centered");
+  return false;
+}
+
+bool squareOnCrossLine(QTRSensors &qtr, Motor &motorL, Motor &motorR, int speed, uint32_t timeoutMs){
+  uint16_t sensorValues[QTR_SENSOR_COUNT];
+  updateBatteryCompensation();
+  const int s = compensateForBattery(speed);
+  const uint32_t startMs = millis();
+
+  while(millis() - startMs < timeoutMs){
+    qtr.readLineBlack(sensorValues);
+    const bool leftOnLine = sensorValues[leftOuterSensor] > BLACKLINE_THRESHOLD;
+    const bool rightOnLine = sensorValues[rightOuterSensor] > BLACKLINE_THRESHOLD;
+    if(leftOnLine && rightOnLine){
+      motorL.brake();
+      motorR.brake();
+      Serial.printf("squareOnCrossLine: square after %lu ms\n", millis() - startMs);
+      return true;
+    }
+    //each wheel moves only while the outer sensor on its side is still off the cross line
+    if(leftOnLine) motorL.brake(); else motorL.setSpeed(s);
+    if(rightOnLine) motorR.brake(); else motorR.setSpeed(s);
+    if(!missionWait(5)) return false;
+  }
+  motorL.brake();
+  motorR.brake();
+  Serial.println("squareOnCrossLine: timeout, not square");
+  return false;
 }
 
 bool allignOnCheckpoint(PIDController &pid, QTRSensors &qtr, Motor &motorL, Motor &motorR){
@@ -327,13 +401,28 @@ bool turnUntilPackage(){
   Serial.printf("turnUntilPackage: start, barrier sensor %u us (threshold %u)\n", readBarrierSensor(), barrierThreshold);
   shield.motor(revolverMotorNumber).setSpeed(revolverTurnSpeed);
   bool pakageDetected = false;
+  //a package counts only when the sensor goes from free to blocked: a package stuck at the sensor
+  //(sensor blocked from the start) must not stop the revolver immediately
+  bool sensorWasFree = !barrierDetected();
+  if(!sensorWasFree){
+    Serial.println("turnUntilPackage: sensor blocked at the start (package stuck?), waiting until it clears");
+  }
   uint32_t startMs = millis();
   while(!pakageDetected && millis() - startMs < revolverTimeOutMs){
     if(!missionWait(5)) return false; // Stop pressed: abortMission() already braked the revolver
-    pakageDetected = barrierDetected();
+    const bool blocked = barrierDetected();
+    if(!blocked){
+      sensorWasFree = true;
+    }
+    pakageDetected = sensorWasFree && blocked;
+    if(!sensorWasFree && millis() - startMs >= revolverBlockedTimeOutMs){
+      break; // the stuck package did not clear: stop instead of turning for the full timeout
+    }
   }
   shield.motor(revolverMotorNumber).brake();
-  Serial.printf("turnUntilPackage: %s after %lu ms\n", pakageDetected ? "package detected" : "timeout", millis() - startMs);
+  Serial.printf("turnUntilPackage: %s after %lu ms\n",
+                pakageDetected ? "package detected" : (sensorWasFree ? "timeout" : "sensor still blocked (package stuck)"),
+                millis() - startMs);
   encodedMotorDelay(200);
   return pakageDetected;
 }

@@ -197,6 +197,20 @@ constexpr uint32_t turnAlignWiggleMs = 500;      // forward part of the alignmen
 constexpr uint32_t turnAlignBackTimeoutMs = 1500;
 constexpr int turnAlignSpeed = 700;
 
+// QTR alignment after the 180 turn
+// 1. Centering: after the turn the robot turns on the spot in short pulses until the line is under the
+//    middle sensor (corrects the overshoot of the fast turn).
+constexpr int centerTurnSpeed = 850;           // pivot speed of a pulse; raise it if the robot does not move
+constexpr uint32_t centerPulseMs = 30;         // length of one pulse
+constexpr int centerTolerance = 300;           // allowed line position error (0..4000 scale, 2000 = middle)
+constexpr uint32_t centerTimeOutMs = 1500;
+// 2. Squaring: when backing onto the cross line, each wheel drives until the outer sensor on its side sees
+//    black, so the sensor bar ends parallel to the cross line (robot straight on the track).
+//    Sensor 4 is on the left side (a line under it makes the PID steer left). If the robot twists away
+//    from the line instead of squaring up, swap these two numbers.
+constexpr uint8_t leftOuterSensor = 4;
+constexpr uint8_t rightOuterSensor = 0;
+
 // Revolver (M5) speed while turning to the next cube
 constexpr int revolverTurnSpeed = 1500;   // original value; max 4095
 // After each shot the shooter keeps this rpm until the cube has left, then goes straight to the next shot's rpm.

@@ -281,21 +281,14 @@ bool alignOnCrossLineAfterTurn(MissionContext &ctx)
     if (!missionWait(150))
         return false;
 
-    // 3. Back slowly until the sensors are on the cross line again
-    startMs = millis();
-    while (millis() - startMs < turnAlignBackTimeoutMs)
-    {
-        driveStep(ctx, -turnAlignSpeed, startMs, false);
-        if (lineStatus == STOP)
-        {
-            brakeDrive(ctx);
-            return true;
-        }
-        if (!missionWait(5))
-            return false;
-    }
+    // 3. Back slowly onto the cross line; each wheel stops when the outer sensor on its side sees the line,
+    //    so the robot ends square to the cross line
+    const bool square = squareOnCrossLine(ctx.qtr, ctx.motorL, ctx.motorR, -turnAlignSpeed, turnAlignBackTimeoutMs);
     brakeDrive(ctx);
-    Serial.println("Mission: cross line not found again while aligning, shooting Haus 3 row 1 from here");
+    if (missionAborted())
+        return false;
+    if (!square)
+        Serial.println("Mission: not square on the cross line, shooting Haus 3 row 1 from here");
     return true;
 }
 
