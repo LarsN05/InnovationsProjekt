@@ -310,6 +310,20 @@ bool turnAndShootAction(MissionContext &ctx)
     brakeDrive(ctx);
     if (!missionWait(200))
         return false;
+
+    // No shots at this cross line (Haus 2 and 3 skipped in shotPlan): just turn 180 degrees where the robot
+    // stopped and continue line following. A cross line under the sensors after the turn is not counted,
+    // because checkpointLockoutMs starts when this action ends.
+    if (!hasPlannedShots(turnCheckpoint, false) && !hasPlannedShots(turnCheckpoint, true))
+    {
+        if (enableMissionSounds)
+            playSound(Sound::Turn);
+        if (!perform180Turn(ctx.qtr, ctx.motorL, ctx.motorR))
+            return false; // turn timed out (or Stop): the robot stops
+        brakeDrive(ctx);
+        ctx.pid.reset();
+        return true;
+    }
     if (!shootPlannedShots(ctx, turnCheckpoint, false))
         return false;
     if (!missionWait(200))
