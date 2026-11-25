@@ -114,6 +114,7 @@ void setup()
   // minimum = 144, 140 
   // maximum = 175, 185
   //setSwitchAngle(140);
+  setSwitchAngle(switchCenterDeg + switchOffsetDeg); // switch to the left slide at startup
 
   // The web interface starts here, before the test below, so it also works while the test runs.
 #if ENABLE_WEB_INTERFACE
@@ -231,6 +232,18 @@ void loop()
   {
     lastBarrierReadMs = millis();
     readBarrierSensor();
+  }
+
+  // Test shot from the web interface (blocks the loop until the shot is done, Stop cancels it)
+  if (testShotRequested && !robotMotionEnabled)
+  {
+    testShotRequested = false;
+    testShotActive = true;
+    const bool shotOk = shootSequence(testShotRight, testShotRpm);
+    const bool cancelled = !testShotActive;
+    testShotActive = false;
+    adjustSpeed(0);
+    Serial.printf("Test shot: %s\n", cancelled ? "cancelled" : (shotOk ? "done" : "failed (rpm too low or no package)"));
   }
 
 #if ENCODER_MOTOR_TEST_MODE

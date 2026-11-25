@@ -13,13 +13,12 @@ constexpr uint32_t allignementMs = 500; //constant for the allignement reversal 
 constexpr uint16_t reversalSpeed = 600; //speed for reversal
 constexpr uint32_t allignementTimeOutMs = 3000; // timout for reversal in allignOnCheckpoint
 constexpr uint32_t revolverTimeOutMs = 10000;
-constexpr uint16_t revolverTurnSpeed = 2000;
-constexpr float rpmAccuracy = 8; // allowed deviation from the target rpm
+constexpr float rpmAccuracy = 4; // allowed deviation from the target rpm
 constexpr uint32_t spinUpTimeOutMs = 10000; // maximum time for the motor to reach the target rpm
 constexpr uint32_t rpmStableMs = 300; // the rpm has to stay within rpmAccuracy for this long
 
 bool missionAborted(){
-  return !robotMotionEnabled;
+  return !robotMotionEnabled && !testShotActive; // a web test shot runs while the robot stands still
 }
 
 void abortMission(){
@@ -339,26 +338,37 @@ bool turnUntilPackage(){
   return pakageDetected;
 }
 
-bool shootSequence(bool leftSlide, int rpm){
+bool shootSequence(bool switchRight, int rpm, bool stopShooterAfter){
   adjustSpeed(rpm);
-  setSwitch(leftSlide);
+  setSwitch(!switchRight); // only moves the servo if enableSlideSwitch
   uint32_t startMs = millis();
-  uint32_t stableSinceMs = startMs;
+  uint32_t stableSinceMs = startMs;      // since when the rpm is within rpmAccuracy of the target
+  uint32_t aboveMinSinceMs = startMs;    // since when the rpm is above minShotRpm
   bool rpmReached = false;
   //wait until the rpm stays close to the target for rpmStableMs
   while(!rpmReached && millis() - startMs < spinUpTimeOutMs){
     if(!missionWait(10)) return false; // Stop pressed: abortMission() already stopped the shooter
-    if(fabs(encodedMotorTargetRpmValue() - encodedMotorRpm()) > rpmAccuracy){
+    const float measured = encodedMotorRpm();
+    if(fabs(encodedMotorTargetRpmValue() - measured) > rpmAccuracy){
       stableSinceMs = millis();
+    }
+    if(fabs(measured) < minShotRpm){
+      aboveMinSinceMs = millis();
     }
     rpmReached = millis() - stableSinceMs >= rpmStableMs;
   }
+  //exact rpm not reached in time: still shoot if the shooter runs steadily above minShotRpm
+  const bool aboveMinimum = millis() - aboveMinSinceMs >= rpmStableMs;
+  const bool fire = rpmReached || aboveMinimum;
   Serial.printf("shootSequence: target %.0f rpm, measured %.1f rpm, %s\n",
-                encodedMotorTargetRpmValue(), encodedMotorRpm(), rpmReached ? "rpm reached" : "rpm NOT reached -> revolver not turned");
-  //the revolver only turns once the motor runs at the target rpm
-  bool success = rpmReached && turnUntilPackage();
-  missionWait(2000); // keep the shooter running while the package leaves
-  adjustSpeed(0);
+                encodedMotorTargetRpmValue(), encodedMotorRpm(),
+                rpmReached ? "rpm reached" : (aboveMinimum ? "rpm NOT reached, but above minimum -> shooting anyway"
+                                                           : "rpm NOT reached and below minimum -> shot skipped"));
+  bool success = fire && turnUntilPackage();
+  missionWait(shotFollowThroughMs); // keep the shooter running while the package leaves
+  if(stopShooterAfter){
+    adjustSpeed(0);
+  }
   return success && !missionAborted();
 }
 

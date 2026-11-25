@@ -3,7 +3,7 @@
 
 // Set to 1 to enable the WiFi web interface for live telemetry and remote control.
 // Set to 0 for standalone mode: the robot auto-starts after calibration with no WiFi.
-#define ENABLE_WEB_INTERFACE 1
+#define ENABLE_WEB_INTERFACE 0
 
 // Set to 1 to test the encoder motor: skips the sensor calibration and the line following,
 // the robot does not drive. Set the motor rpm live in the web interface ("Encoder motor test").
@@ -83,71 +83,132 @@ constexpr uint32_t checkpointLockoutMs = 600;  // after a checkpoint, further cr
 
 // Mission: checkpoint numbers. What happens at each one is listed in the table in mission.cpp.
 // Track: Wettbewerbsstrecke 2026. Each cross line counts once. The cannon shoots to the LEFT of the robot.
+// Every house has 3 balcony rows and 3 cross lines. Row 1 is shot at the house's 2nd cross line,
+// row 2 at its 3rd cross line, row 3 after following the line for thirdBalconyDriveMs (there is no 4th line).
 //  1      distribution center (DS)
-//  2-4    Haus 1: bottom line, robot drives east, house on its left
-//  5-7    Haus 2: top line, robot drives north, house on its left | 180 degree turn at 7
-//  7-9    Haus 3: same line after the turn, robot drives south, house on its left (7 = shot right after the turn)
-//  10-12  Haus 1 again, now on the right: the cannon cannot reach it, no shots
-//  13     distribution center = finish
+//  2-4    Haus 1: bottom line, robot drives east  -> row 1 at 3, row 2 at 4, row 3 at 4 + drive
+//  5-7    Haus 2: top line, robot drives north    -> row 1 at 6, row 2 at 7, row 3 at 7 after a ~25 degree
+//         right turn on the spot (and back), then 180 degree turn. After the turn the sensors are on the middle
+//         cross line: the robot aligns on it and shoots Haus 3 row 1 there (inside the action, not counted).
+//  8      Haus 3: bottom cross line of the top line  -> row 2 at 8, row 3 at 8 + drive
+//  9-11   Haus 1 again, now on the right: the cannon cannot reach it, no shots
+//  12     distribution center = finish
 constexpr int distributionCenter = 1;
-constexpr int turnCheckpoint = 7;         // top cross line: shoot Haus 2, 180 degree turn, shoot Haus 3
-constexpr int dcCheckpoint = 12;          // not used by the mission yet
-constexpr int finalCheckpoint = 13;       // distribution center
+constexpr int turnCheckpoint = 7;         // top cross line: Haus 2 shots, turn, Haus 3 row 1
+constexpr int dcCheckpoint = 11;          // not used by the mission yet
+constexpr int finalCheckpoint = 12;       // distribution center
 
-// Shot settings for the 12 possible trajectories: 3 houses x 4 balcony heights.
-// Placeholder values - determine them experimentally on the track.
-struct ShotSetting
-{
-    bool leftSlide; // switch position: true = left slide, false = right slide (only used if enableSlideSwitch)
-    int rpm;        // shooter speed in rpm
-};
-
+// Every house has 3 balcony rows (one per cross line position). Every balcony gets shot:
+// row 1 has 3 balconies, row 2 has 4, row 3 has 3 -> 10 shots per house.
+// Each shot has its own setting {rpm, switchRight}: switchRight true = right slide, false = left slide.
 enum HouseIndex
 {
     HouseClose = 0,  // Haus 1: next to the bottom line, checkpoints 2-4
     HouseMedium = 1, // Haus 2: left of the top line, checkpoints 5-7 before the turn
-    HouseFar = 2,    // Haus 3: right of the top line, checkpoints 7-9 after the turn, farthest from the line
+    HouseFar = 2,    // Haus 3: right of the top line, checkpoints 8-9 after the turn, farthest from the line
     HouseCount = 3
 };
-constexpr int balconyHeightCount = 4; // index 0 = lowest balcony ... 3 = highest balcony
+constexpr int balconyRowCount = 3;                          // row 1, 2, 3 in driving direction
+constexpr int maxShotsPerRow = 4;
+constexpr int shotsPerRow[balconyRowCount] = {3, 4, 3};    // row 1: 3 shots, row 2: 4 shots, row 3: 3 shots
 
-constexpr ShotSetting shotSettings[HouseCount][balconyHeightCount] = {
-    //                      height 0       height 1       height 2       height 3
-    /* HouseClose  */ {{false, 100}, {false, 100}, {false, 100}, {false, 100}},
-    /* HouseMedium */ {{false, 100}, {false, 100}, {false, 100}, {false, 100}},
-    /* HouseFar    */ {{false, 100}, {false, 100}, {false, 100}, {false, 100}},
+struct Shot
+{
+    int rpm;          // shooter speed in rpm
+    bool switchRight; // switch servo: true = right slide, false = left slide
 };
 
-// Shooting plan: one line per shot. At every cross line listed here the robot stops and fires these shots
-// in order (several lines with the same checkpoint = several shots there). Slide and rpm come from shotSettings.
-// Each cross line faces one balcony of its house; balconyHeight says which balcony that is.
-// afterTurn is only relevant at turnCheckpoint: false = before the 180 turn (Haus 2), true = after it (Haus 3).
-// The balcony heights below are placeholders - set them to the balcony each cross line actually faces.
-struct PlannedShot
+// shots[house][row][shot]: fired in this order (shot 1 = lowest balcony). Placeholder rpm - tune every shot on the track.
+// Row 2 shot 4 = top balcony of the middle row: uses the right slide.
+// Rows 1 and 3 fire only the first 3 shots; their 4th entry is unused.
+constexpr Shot shots[HouseCount][balconyRowCount][maxShotsPerRow] = {
+    // Haus 1           shot 1         shot 2         shot 3         shot 4
+    {
+        /* row 1 */ {{70, false}, {95, false}, {108, true}, {0, false}},
+        /* row 2 */ {{70, false}, {95, false}, {108, true}, {115, true}},
+        /* row 3 */ {{70, false}, {95, false}, {108, true}, {0, false}},
+    },
+    // Haus 2
+    {
+        /* row 1 */ {{105, false}, {110, false}, {125, true}, {0, false}},
+        /* row 2 */ {{105, false}, {110, false}, {125, true}, {130, true}},
+        /* row 3 */ {{105, false}, {110, false}, {125, true}, {0, false}},
+    },
+    // Haus 3
+    {
+        /* row 1 */ {{115, false}, {130, false}, {145, true}, {0, false}},
+        /* row 2 */ {{115, false}, {130, false}, {145, true}, {150, true}},
+        /* row 3 */ {{115, false}, {130, false}, {145, true}, {0, false}},
+    },
+};
+
+// Row 3 has no cross line of its own: after the row 2 shots the robot follows the line for this long.
+constexpr uint32_t thirdBalconyDriveMs = 1450;   // tested on the track; follows the line
+constexpr int shotDriveSpeed = 800;
+
+// Shooting plan: at which cross line each balcony row is shot. All shots of that row are fired there.
+// afterTurn: only at turnCheckpoint - false = before the 180 turn (Haus 2), true = right after it (Haus 3 row 1,
+//            on the middle cross line after aligning on it).
+// move: what the robot does before the row:
+//   Stay          shoot where the robot stands
+//   FollowLine    follow the line for thirdBalconyDriveMs
+//   TurnRight     turn right on the spot by about 25 degrees (rowTurnMs), shoot, turn back
+enum class RowMove
+{
+    Stay,
+    FollowLine,
+    TurnRight
+};
+
+struct RowStop
 {
     int checkpoint;
     bool afterTurn;
     HouseIndex house;
-    int balconyHeight; // 0..balconyHeightCount-1
+    int row; // 0..2 = row 1..3
+    RowMove move;
 };
 
-constexpr PlannedShot shotPlan[] = {
-    // Haus 1 (bottom line, driving east)
-    {2, false, HouseClose, 0},
-    {3, false, HouseClose, 1},
-    {4, false, HouseClose, 2},
-    // Haus 2 (top line, driving north)
-    {5, false, HouseMedium, 0},
-    {6, false, HouseMedium, 1},
-    {7, false, HouseMedium, 2},
-    // Haus 3 (top line after the 180 turn, driving south)
-    {7, true, HouseFar, 2},
-    {8, true, HouseFar, 1},
-    {9, true, HouseFar, 0},
+constexpr RowStop shotPlan[] = {
+    // Haus 1 (bottom line, driving east): cross lines 2, 3, 4
+    {3, false, HouseClose, 0, RowMove::Stay},
+    {4, false, HouseClose, 1, RowMove::Stay},
+    {4, false, HouseClose, 2, RowMove::FollowLine},
+    // Haus 2 (top line, driving north): cross lines 5, 6, 7
+    {6, false, HouseMedium, 0, RowMove::Stay},
+    {7, false, HouseMedium, 1, RowMove::Stay},
+    {7, false, HouseMedium, 2, RowMove::TurnRight}, // stays on cross line 7, turns ~25 degrees towards row 3
+    // Haus 3 (top line after the 180 turn, driving south): middle cross line right after the turn, then 8
+    {7, true, HouseFar, 0, RowMove::Stay},
+    {8, false, HouseFar, 1, RowMove::Stay},
+    {8, false, HouseFar, 2, RowMove::FollowLine},
 };
+
+// RowMove::TurnRight: spin on the spot for this long (about 25 degrees - tune on the track), then turn back
+// the same time after the row. Right = the cannon (on the left side) swings towards the front.
+constexpr uint32_t rowTurnMs = 300;
+constexpr int rowTurnSpeed = 900;
+
+// After the 180 turn: the robot drives forward (with line steering) until the sensors see the middle cross line.
+// Then it aligns: forward past the cross line for turnAlignWiggleMs (straightens it on the line), and back
+// slowly until it is on the cross line again. Then it shoots Haus 3 row 1.
+constexpr uint32_t turnAlignSearchMs = 1500;     // finding the cross line: gives up after this long
+constexpr uint32_t turnAlignWiggleMs = 500;      // forward part of the alignment
+constexpr uint32_t turnAlignBackTimeoutMs = 1500;
+constexpr int turnAlignSpeed = 700;
+
+// Revolver (M5) speed while turning to the next cube
+constexpr int revolverTurnSpeed = 1500;   // original value; max 4095
+// After each shot the shooter keeps this rpm until the cube has left, then goes straight to the next shot's rpm.
+// The shooter only stops after the last shot of the run (keeps its momentum between rows and houses).
+constexpr uint32_t shotFollowThroughMs = 2000;
+// If a shot's exact rpm is not reached within the spin-up timeout, the cube is still fired as long as the
+// shooter runs steadily above this rpm (otherwise that shot is skipped).
+constexpr float minShotRpm = 65.0f;
 
 // Mission: distribution center (checkpoint 1).
-// Sequence: stop on the cross line, wait, back off, extend the arm, drive forward (cubes fall), retract the arm, continue.
+// Sequence: stop on the cross line, wait, back off, extend the arm, drive forward (triggers the DS),
+// drive back, retract the arm, drive forward over the cross line, continue.
 // The moves are measured from the checkpoint cross line instead of being purely timed:
 // each move drives until the cross line is reached or left, then keeps going for the "extra" time.
 // The extra times are first estimates - tune them on the track.
@@ -160,8 +221,9 @@ constexpr uint32_t distributionStandStillMs = 3500;   // rule: stand still at th
 constexpr uint32_t distributionBackOffExtraMs = 400;  // back off: until the cross line is left, then this long
 constexpr uint32_t distributionForwardExtraMs = 400;  // forward with the arm extended: until the cross line is reached again, then this long
 constexpr uint32_t distributionServoSettleMs = 500;   // time for the arm to move
-constexpr uint32_t distributionDropWaitMs = 1000;     // after driving forward: time for the cubes to fall before the arm retracts
-constexpr uint32_t crossLineTimeoutMs = 2000;         // a move that does not find the cross line in time stops the run
+constexpr uint32_t distributionDropWaitMs = 1000;     // after driving forward: time for the cubes to fall
+constexpr uint32_t distributionReturnExtraMs = 200;   // back after the drop: until the cross line is reached again, then this long
+constexpr uint32_t crossLineTimeoutMs = 2000;
 
 // Mission: drive moves
 constexpr uint32_t moveRampMs = 100;               // speed ramps up over this time to avoid wheel slip
@@ -176,7 +238,7 @@ constexpr bool enableBuzzerPushPull = true;  // second buzzer leg on GPIO 13 (SP
 constexpr bool enableMissionSounds = true; // play matching sounds automatically during the run (checkpoints, shooting, finish, ...)
 
 // Slide switch servo (setSwitch). Leave disabled until the servo is mounted.
-constexpr bool enableSlideSwitch = false;
+constexpr bool enableSlideSwitch = true;   // the switch servo is set before every shot (switchRight in shots[])
 constexpr uint8_t slideSwitchServo = 8;
 constexpr float slideSwitchRangeDeg = 270.0f;      // set to 180 for a 180 degree servo
 constexpr float switchCenterDeg = 165;             // center position of the switch servo
@@ -195,3 +257,11 @@ constexpr float switchOffsetDeg = 20;              // switch travel to each side
 #define SERVO_5V_VOLTAGE_FROM_MONITOR_VOLTAGE_CONVERSION_FACTOR (1.0 / SERVO_5V_VOLTAGE_TO_MONITOR_VOLTAGE_CONVERSION_FACTOR) // 5V_Servo = Servo_5V_monitor * 1.691
 
 #define HOLD_ON_CALIBRATION_FAILURE (false)
+
+// Centering after the calibration sweeps: the robot turns in short pulses until the line is under the
+// middle sensor, so it starts aligned with the line. Line position 0..4000, 2000 = centered.
+constexpr int calibrationCenterSpeed = 700;            // turn speed of the pulses (must be above the motor deadzone ~560)
+constexpr uint32_t calibrationCenterPulseMs = 25;      // motor on per pulse
+constexpr uint32_t calibrationCenterSettleMs = 60;     // motor braked after each pulse, then the sensors are read
+constexpr int calibrationCenterTolerance = 150;        // done when |position - 2000| is below this
+constexpr uint32_t calibrationCenterTimeoutMs = 4000;  // give up after this long

@@ -61,14 +61,15 @@ enum class CrossLine
 
 // Drives straight (negative speed = backwards) until the checkpoint cross line is reached or left,
 // then keeps going for extraMs and brakes. Returns false on Stop or if the cross line was not found in time.
-bool driveFromCrossLine(MissionContext &ctx, int speed, CrossLine edge, uint32_t extraMs)
+bool driveFromCrossLine(MissionContext &ctx, int speed, CrossLine edge, uint32_t extraMs,
+                        uint32_t timeoutMs = crossLineTimeoutMs)
 {
     const bool steer = speed > 0;
     ctx.pid.reset();
     const uint32_t startMs = millis();
 
     bool found = false;
-    while (millis() - startMs < crossLineTimeoutMs)
+    while (millis() - startMs < timeoutMs)
     {
         driveStep(ctx, speed, startMs, steer);
         const bool onCrossLine = (lineStatus == STOP);
@@ -86,7 +87,7 @@ bool driveFromCrossLine(MissionContext &ctx, int speed, CrossLine edge, uint32_t
     {
         brakeDrive(ctx);
         Serial.printf("Mission: cross line not %s within %lu ms\n",
-                      edge == CrossLine::Reach ? "reached" : "left", (unsigned long)crossLineTimeoutMs);
+                      edge == CrossLine::Reach ? "reached" : "left", (unsigned long)timeoutMs);
         return false;
     }
 
@@ -103,34 +104,92 @@ bool driveFromCrossLine(MissionContext &ctx, int speed, CrossLine edge, uint32_t
     return true;
 }
 
-// Fires every shot of the shooting plan (config.h) for this cross line. afterTurn selects the shots
-// before or after the 180 degree turn at turnCheckpoint. A missed shot does not stop the run.
-bool shootPlannedShots(int checkpointNumber, bool afterTurn)
+// Spins on the spot for durationMs (speed > 0 = turn right, < 0 = turn left), then brakes.
+bool turnOnSpotFor(MissionContext &ctx, int speed, uint32_t durationMs)
 {
-    for (const PlannedShot &planned : shotPlan)
+    const int s = compensateForBattery(speed);
+    ctx.motorL.setSpeed(s);
+    ctx.motorR.setSpeed(-s);
+    const bool ok = missionWait(durationMs);
+    brakeDrive(ctx);
+    return ok;
+}
+
+// Follows the line (PID steering) for durationMs, then brakes.
+bool followLineFor(MissionContext &ctx, int speed, uint32_t durationMs)
+{
+    ctx.pid.reset();
+    const uint32_t startMs = millis();
+    while (millis() - startMs < durationMs)
     {
-        if (planned.checkpoint != checkpointNumber || planned.afterTurn != afterTurn)
+        driveStep(ctx, speed, startMs, true);
+        if (!missionWait(5))
+            return false;
+    }
+    brakeDrive(ctx);
+    return true;
+}
+
+// Fires every balcony row planned for this cross line (shotPlan in config.h), in order, and every shot
+// of each row (shots in config.h). Before a row the robot moves as given by its RowMove.
+// The shooter keeps spinning between shots and rows; it only stops after the last row of the plan.
+// A missed shot does not stop the run.
+bool shootPlannedShots(MissionContext &ctx, int checkpointNumber, bool afterTurn)
+{
+    constexpr size_t planLength = sizeof(shotPlan) / sizeof(shotPlan[0]);
+    for (size_t p = 0; p < planLength; ++p)
+    {
+        const RowStop &stop = shotPlan[p];
+        if (stop.checkpoint != checkpointNumber || stop.afterTurn != afterTurn)
             continue;
-        if (planned.balconyHeight < 0 || planned.balconyHeight >= balconyHeightCount)
+        if (stop.row < 0 || stop.row >= balconyRowCount)
         {
-            Serial.printf("Shot plan: balcony height %d does not exist, shot skipped\n", planned.balconyHeight);
+            Serial.printf("Shot plan: row %d does not exist, skipped\n", stop.row + 1);
             continue;
         }
-        const ShotSetting &shot = shotSettings[planned.house][planned.balconyHeight];
-        Serial.printf("Shot: house %d, balcony %d, %s slide, %d rpm\n", planned.house + 1, planned.balconyHeight,
-                      shot.leftSlide ? "left" : "right", shot.rpm);
-        shootSequence(shot.leftSlide, shot.rpm);
-        if (missionAborted())
-            return false;
+        if (stop.move == RowMove::FollowLine)
+        {
+            updateBatteryCompensation();
+            if (!followLineFor(ctx, shotDriveSpeed, thirdBalconyDriveMs))
+                return false;
+            if (!missionWait(200)) // let the robot settle before shooting
+                return false;
+        }
+        else if (stop.move == RowMove::TurnRight)
+        {
+            if (!turnOnSpotFor(ctx, rowTurnSpeed, rowTurnMs))
+                return false;
+            if (!missionWait(200))
+                return false;
+        }
+        const bool lastRowOfRun = (p == planLength - 1);
+        for (int i = 0; i < shotsPerRow[stop.row]; ++i)
+        {
+            const Shot &shot = shots[stop.house][stop.row][i];
+            const bool lastShotOfRun = lastRowOfRun && (i == shotsPerRow[stop.row] - 1);
+            Serial.printf("Shot: Haus %d, row %d, shot %d: %d rpm, %s slide\n", stop.house + 1, stop.row + 1, i + 1,
+                          shot.rpm, shot.switchRight ? "right" : "left");
+            shootSequence(shot.switchRight, shot.rpm, lastShotOfRun);
+            if (missionAborted())
+                return false;
+        }
+        if (stop.move == RowMove::TurnRight)
+        {
+            // turn back to the line direction
+            if (!turnOnSpotFor(ctx, -rowTurnSpeed, rowTurnMs))
+                return false;
+            if (!missionWait(200))
+                return false;
+        }
     }
     return true;
 }
 
 bool hasPlannedShots(int checkpointNumber)
 {
-    for (const PlannedShot &planned : shotPlan)
+    for (const RowStop &stop : shotPlan)
     {
-        if (planned.checkpoint == checkpointNumber)
+        if (stop.checkpoint == checkpointNumber && !stop.afterTurn)
             return true;
     }
     return false;
@@ -159,51 +218,131 @@ bool distributionCenterAction(MissionContext &ctx)
     if (!missionWait(distributionServoSettleMs))
         return false;
 
-    // 4. Drive forward over the cross line with the arm extended, so the cubes fall.
-    //    This ends past the cross line, so the line following does not count it a second time.
+    // 4. Drive forward over the cross line with the arm extended: this triggers the distribution center
     if (!driveFromCrossLine(ctx, missionDriveSpeed, CrossLine::Reach, distributionForwardExtraMs))
         return false;
     if (!missionWait(distributionDropWaitMs))
         return false;
 
-    // 5. Retract the arm, then line following continues to the next checkpoint
+    // 5. Drive back until the cross line is reached again, then a bit further
+    if (!driveFromCrossLine(ctx, -missionDriveSpeed, CrossLine::Reach, distributionReturnExtraMs))
+        return false;
+
+    // 6. Retract the arm
     arm.setAngle(distributionServoUpDeg);
-    return missionWait(distributionServoSettleMs);
+    if (!missionWait(distributionServoSettleMs))
+        return false;
+
+    // 7. Drive forward over the cross line and off it, so the line following does not count it a second time.
+    //    Then line following continues to the next checkpoint.
+    if (!driveFromCrossLine(ctx, missionDriveSpeed, CrossLine::Reach, 0))
+        return false;
+    return driveFromCrossLine(ctx, missionDriveSpeed, CrossLine::Leave, 0);
 }
 
-// Balcony cross line: stop, shoot the planned shots, continue.
+// Balcony cross line: brake on the line and fire the planned shots, then continue.
 bool balconyShootAction(MissionContext &ctx)
 {
     brakeDrive(ctx);
-    return shootPlannedShots(checkpointCounter, false);
+    if (!missionWait(200))
+        return false;
+    return shootPlannedShots(ctx, checkpointCounter, false);
 }
 
-// Top cross line: shoot Haus 2, turn 180 degrees, shoot Haus 3.
+// After the 180 turn: drive forward (with line steering) until the sensors see the cross line, then align:
+// forward past it for turnAlignWiggleMs, back slowly until the sensors are on the cross line again, brake.
+// Returns false only on Stop; if a line is not found the robot brakes and the run continues.
+bool alignOnCrossLineAfterTurn(MissionContext &ctx)
+{
+    // 1. Find the cross line (does not move if the sensors are already on it)
+    ctx.qtr.readLineBlack(qtrSensorValues);
+    updateLineStatus();
+    ctx.pid.reset();
+    uint32_t startMs = millis();
+    while (lineStatus != STOP)
+    {
+        if (millis() - startMs >= turnAlignSearchMs)
+        {
+            brakeDrive(ctx);
+            Serial.println("Mission: no cross line found after the turn, shooting Haus 3 row 1 from here");
+            return true;
+        }
+        driveStep(ctx, turnAlignSpeed, startMs, true);
+        if (!missionWait(5))
+            return false;
+    }
+    brakeDrive(ctx);
+    if (!missionWait(150))
+        return false;
+
+    // 2. Forward past the cross line (line steering straightens the robot)
+    if (!followLineFor(ctx, turnAlignSpeed, turnAlignWiggleMs))
+        return false;
+    if (!missionWait(150))
+        return false;
+
+    // 3. Back slowly until the sensors are on the cross line again
+    startMs = millis();
+    while (millis() - startMs < turnAlignBackTimeoutMs)
+    {
+        driveStep(ctx, -turnAlignSpeed, startMs, false);
+        if (lineStatus == STOP)
+        {
+            brakeDrive(ctx);
+            return true;
+        }
+        if (!missionWait(5))
+            return false;
+    }
+    brakeDrive(ctx);
+    Serial.println("Mission: cross line not found again while aligning, shooting Haus 3 row 1 from here");
+    return true;
+}
+
+// Top cross line (7): Haus 2 row 2 on the line, ~10 degree turn, Haus 2 row 3, turn back,
+// 180 degree turn, align on the middle cross line under the sensors, Haus 3 row 1, drive off that line
+// (so it is not counted). Haus 3 rows 2 and 3 follow at the next cross line.
 bool turnAndShootAction(MissionContext &ctx)
 {
     brakeDrive(ctx);
-    if (!shootPlannedShots(turnCheckpoint, false))
+    if (!missionWait(200))
+        return false;
+    if (!shootPlannedShots(ctx, turnCheckpoint, false))
         return false;
     if (!missionWait(200))
         return false;
+
+    // Make sure the sensors are on the top cross line before turning (does nothing if they already are)
+    updateBatteryCompensation();
+    if (!driveFromCrossLine(ctx, -missionDriveSpeed, CrossLine::Reach, 0, thirdBalconyDriveMs + 2000))
+        return false;
+    if (!missionWait(200))
+        return false;
+
     if (enableMissionSounds)
         playSound(Sound::Turn);
     if (!perform180Turn(ctx.qtr, ctx.motorL, ctx.motorR))
         return false; // turn timed out (or Stop): the robot stops
-    ctx.pid.reset();
-
-    // After the turn the sensors may still be on the cross line: drive off it before shooting,
-    // so the line following does not count it a second time (does nothing if the robot is already off it).
-    if (!driveFromCrossLine(ctx, missionDriveSpeed, CrossLine::Leave, 0))
-        return false;
     brakeDrive(ctx);
+    ctx.pid.reset();
     if (!missionWait(200))
         return false;
-    return shootPlannedShots(turnCheckpoint, true);
+
+    // Haus 3 row 1 on the middle cross line
+    if (!alignOnCrossLineAfterTurn(ctx))
+        return false;
+    if (!missionWait(200))
+        return false;
+    if (!shootPlannedShots(ctx, turnCheckpoint, true))
+        return false;
+
+    // Drive off the middle cross line so the line following does not count it
+    return driveFromCrossLine(ctx, missionDriveSpeed, CrossLine::Leave, 0);
 }
 
 bool finishRunAction(MissionContext &ctx)
 {
+    adjustSpeed(0); // shooter off (it normally already stopped after the last shot)
     allignOnCheckpoint(ctx.pid, ctx.qtr, ctx.motorL, ctx.motorR);
     brakeDrive(ctx);
     robotMotionEnabled = false; // run complete

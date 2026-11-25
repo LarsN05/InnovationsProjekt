@@ -84,19 +84,38 @@ void updateLineStatus()
 }
 
 /*
- *  @summary overcome static friction in low speed range:
- *  non-zero commands below minPWMtoMoveMotor are raised to it, keeping their direction.
+ *  @summary overcome static friction in low speed range
  */
-static int compensateDeadzone(int speedCommand)
+static int compensateDeadzoneWithFlip(int speedCommand)
 {
     if (speedCommand == 0)
     {
         return 0;
     }
 
-    const int sign = (speedCommand > 0) ? 1 : -1;
-    const int magnitude = constrain(max(abs(speedCommand), minPWMtoMoveMotor), 0, PWM_MAX_VALUE);
-    return sign * magnitude;
+    int sign = (speedCommand > 0) ? 1 : -1;
+    int magnitude = abs(speedCommand);
+
+    if (magnitude >= minPWMtoMoveMotor)
+    {
+        // Keep direction; ensure we overcome stiction
+        int pwm = magnitude; // already ≥ MIN
+        if (pwm > PWM_MAX_VALUE)
+        {
+            pwm = PWM_MAX_VALUE;
+        }
+        return sign * pwm;
+    }
+    else
+    {
+        // Flip direction and push magnitude above MIN
+        int flippedMag = 2 * minPWMtoMoveMotor - magnitude; // e.g., magnitude=44, MIN=45 -> -46
+        if (flippedMag > PWM_MAX_VALUE)
+        {
+            flippedMag = PWM_MAX_VALUE;
+        }
+        return -sign * flippedMag;
+    }
 }
 
 void setMotorSpeeds(int signal, Motor &motorL, Motor &motorR)
@@ -106,8 +125,8 @@ void setMotorSpeeds(int signal, Motor &motorL, Motor &motorR)
 
     if (enableMotorDeadzoneCompensation)
     {
-        leftMotorSpeed = compensateDeadzone(leftMotorSpeed);
-        rightMotorSpeed = compensateDeadzone(rightMotorSpeed);
+        leftMotorSpeed = compensateDeadzoneWithFlip(leftMotorSpeed);
+        rightMotorSpeed = compensateDeadzoneWithFlip(rightMotorSpeed);
     }
 
     motorL.setSpeed(leftMotorSpeed);
