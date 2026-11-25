@@ -7,3 +7,6 @@
 
 # PlatformIO "project init" leftovers
 *.optional
+
+# Temporary file PlatformIO creates from the .ino during a build
+*.ino.cpp
