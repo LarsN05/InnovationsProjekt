@@ -87,7 +87,7 @@ constexpr uint32_t checkpointLockoutMs = 600;  // after a checkpoint, further cr
 // row 2 at its 3rd cross line, row 3 after following the line for thirdBalconyDriveMs (there is no 4th line).
 //  1      distribution center (DS)
 //  2-4    Haus 1: bottom line, robot drives east  -> row 1 at 3, row 2 at 4, row 3 at 4 + drive
-//  5-7    Haus 2: top line, robot drives north    -> row 1 at 6, row 2 at 7, row 3 at 7 after a ~25 degree
+//  5-7    Haus 2: top line, robot drives north    -> row 1 at 6, row 2 at 7, row 3 at 7 after a ~10 degree
 //         right turn on the spot (and back), then 180 degree turn. After the turn the sensors are on the middle
 //         cross line: the robot aligns on it and shoots Haus 3 row 1 there (inside the action, not counted).
 //  8      Haus 3: bottom cross line of the top line  -> row 2 at 8, row 3 at 8 + drive
@@ -152,7 +152,7 @@ constexpr int shotDriveSpeed = 800;
 // move: what the robot does before the row:
 //   Stay          shoot where the robot stands
 //   FollowLine    follow the line for thirdBalconyDriveMs
-//   TurnRight     turn right on the spot by about 25 degrees (rowTurnMs), shoot, turn back
+//   TurnRight     turn right on the spot by about 10 degrees (rowTurnMs), shoot, turn back
 enum class RowMove
 {
     Stay,
@@ -178,16 +178,16 @@ constexpr RowStop shotPlan[] = {
     // Put // in front of a house's lines to skip it (the 180 turn at cross line 7 still happens).
     {6, false, HouseMedium, 0, RowMove::Stay},
     {7, false, HouseMedium, 1, RowMove::Stay},
-    {7, false, HouseMedium, 2, RowMove::TurnRight}, // stays on cross line 7, turns ~20 degrees towards row 3
+    {7, false, HouseMedium, 2, RowMove::TurnRight}, // stays on cross line 7, turns ~10 degrees towards row 3
     // Haus 3 (top line after the 180 turn, driving south): middle cross line right after the turn, then 8
     {7, true, HouseFar, 0, RowMove::Stay},
     {8, false, HouseFar, 1, RowMove::Stay},
     {8, false, HouseFar, 2, RowMove::FollowLine},
 };
 
-// RowMove::TurnRight: spin on the spot for this long (about 25 degrees - tune on the track), then turn back
+// RowMove::TurnRight: spin on the spot for this long (about 10 degrees - tune on the track), then turn back
 // the same time after the row. Right = the cannon (on the left side) swings towards the front.
-constexpr uint32_t rowTurnMs = 300;
+constexpr uint32_t rowTurnMs = 120;
 constexpr int rowTurnSpeed = 900;
 
 // After the 180 turn: the robot drives forward (with line steering) until the sensors see the middle cross line.
@@ -237,12 +237,12 @@ constexpr uint32_t distributionBackOffExtraMs = 400;  // back off: until the cro
 constexpr uint32_t distributionForwardExtraMs = 400;  // forward with the arm extended: until the cross line is reached again, then this long
 constexpr uint32_t distributionServoSettleMs = 500;   // time for the arm to move
 constexpr uint32_t distributionDropWaitMs = 1000;     // after driving forward: time for the cubes to fall
-constexpr uint32_t distributionReturnExtraMs = 200;   // back after the drop: until the cross line is reached again, then this long
 // Sideways shift towards the distribution center (it is on the LEFT): while backing off the cross line the robot
 // turns its nose a little to the right, reverses (which moves it to the left), then turns back parallel to the line.
-// Shift = back-off distance x sin(angle). Start: about 10 degrees -> roughly 1 cm. 0 = no shift.
+// After the drop the same move is done mirrored (back to the center line), then the robot centers on the line.
+// Shift = back-off distance x sin(angle). Start: about 20 degrees -> roughly 2 cm. 0 = no shift.
 // More shift: larger distributionShiftTurnMs (or longer distributionBackOffExtraMs).
-constexpr uint32_t distributionShiftTurnMs = 120;     // turn on the spot for this long (about 12 ms per degree at rowTurnSpeed)
+constexpr uint32_t distributionShiftTurnMs = 240;     // turn on the spot for this long (about 12 ms per degree at rowTurnSpeed)
 constexpr uint32_t crossLineTimeoutMs = 2000;
 
 // Mission: drive moves

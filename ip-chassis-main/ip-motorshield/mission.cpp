@@ -199,19 +199,15 @@ bool hasPlannedShots(int checkpointNumber, bool afterTurn = false)
 // Checkpoint actions. Return false only when the robot should stop (or Stop was pressed).
 // ---------------------------------------------------------------------------
 
-bool distributionCenterAction(MissionContext &ctx)
+// Reverses off the cross line and shifts sideways at the same time (the robot cannot drive sideways):
+// turn the nose a little away from the target side, reverse until the cross line is left + distributionBackOffExtraMs,
+// turn back parallel to the line. toLeft = true: ends ~shift to the left, false: to the right.
+bool backOffWithShift(MissionContext &ctx, bool toLeft)
 {
-    // 1. Stop on the cross line. Rule: stand still at the marker for at least 3 s before the flap is triggered.
-    brakeDrive(ctx);
-    if (!missionWait(distributionStandStillMs))
-        return false;
-    updateBatteryCompensation();
-
-    // 2. Back off the cross line and shift ~1 cm to the left (towards the distribution center):
-    //    nose a little to the right, reverse, turn back parallel to the line.
+    const int turnSpeed = toLeft ? rowTurnSpeed : -rowTurnSpeed; // positive = turn right
     if (distributionShiftTurnMs > 0)
     {
-        if (!turnOnSpotFor(ctx, rowTurnSpeed, distributionShiftTurnMs))
+        if (!turnOnSpotFor(ctx, turnSpeed, distributionShiftTurnMs))
             return false;
         if (!missionWait(150))
             return false;
@@ -222,9 +218,23 @@ bool distributionCenterAction(MissionContext &ctx)
     {
         if (!missionWait(150))
             return false;
-        if (!turnOnSpotFor(ctx, -rowTurnSpeed, distributionShiftTurnMs))
+        if (!turnOnSpotFor(ctx, -turnSpeed, distributionShiftTurnMs))
             return false;
     }
+    return true;
+}
+
+bool distributionCenterAction(MissionContext &ctx)
+{
+    // 1. Stop on the cross line. Rule: stand still at the marker for at least 3 s before the flap is triggered.
+    brakeDrive(ctx);
+    if (!missionWait(distributionStandStillMs))
+        return false;
+    updateBatteryCompensation();
+
+    // 2. Back off the cross line and shift ~2 cm to the left (towards the distribution center)
+    if (!backOffWithShift(ctx, true))
+        return false;
 
     // 3. Extend the arm
     ShieldServo &arm = shield.servo(distributionServo);
@@ -240,8 +250,8 @@ bool distributionCenterAction(MissionContext &ctx)
     if (!missionWait(distributionDropWaitMs))
         return false;
 
-    // 5. Drive back until the cross line is reached again, then a bit further
-    if (!driveFromCrossLine(ctx, -missionDriveSpeed, CrossLine::Reach, distributionReturnExtraMs))
+    // 5. Drive back (straight) until the sensors are on the cross line again
+    if (!driveFromCrossLine(ctx, -missionDriveSpeed, CrossLine::Reach, 0))
         return false;
 
     // 6. Retract the arm
@@ -249,7 +259,17 @@ bool distributionCenterAction(MissionContext &ctx)
     if (!missionWait(distributionServoSettleMs))
         return false;
 
-    // 7. Drive forward over the cross line and off it, so the line following does not count it a second time.
+    // 7. Back to the center line: the same move mirrored (reverse while shifting ~2 cm to the right),
+    //    then turn in short pulses until the line is under the middle sensor again
+    if (!backOffWithShift(ctx, false))
+        return false;
+    if (!missionWait(100))
+        return false;
+    centerOnLine(ctx.qtr, ctx.motorL, ctx.motorR); // a centering timeout does not stop the run
+    if (missionAborted())
+        return false;
+
+    // 8. Drive forward over the cross line and off it, so the line following does not count it a second time.
     //    Then line following continues to the next checkpoint.
     if (!driveFromCrossLine(ctx, missionDriveSpeed, CrossLine::Reach, 0))
         return false;
