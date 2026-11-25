@@ -185,11 +185,11 @@ bool shootPlannedShots(MissionContext &ctx, int checkpointNumber, bool afterTurn
     return true;
 }
 
-bool hasPlannedShots(int checkpointNumber)
+bool hasPlannedShots(int checkpointNumber, bool afterTurn = false)
 {
     for (const RowStop &stop : shotPlan)
     {
-        if (stop.checkpoint == checkpointNumber && !stop.afterTurn)
+        if (stop.checkpoint == checkpointNumber && stop.afterTurn == afterTurn)
             return true;
     }
     return false;
@@ -252,7 +252,8 @@ bool balconyShootAction(MissionContext &ctx)
 // After the 180 turn: drive forward (with line steering) until the sensors see the cross line, then align:
 // forward past it for turnAlignWiggleMs, back slowly until the sensors are on the cross line again, brake.
 // Returns false only on Stop; if a line is not found the robot brakes and the run continues.
-bool alignOnCrossLineAfterTurn(MissionContext &ctx)
+// findOnly = true: only step 1 (drive forward until the sensors are on the cross line), no wiggle.
+bool alignOnCrossLineAfterTurn(MissionContext &ctx, bool findOnly = false)
 {
     // 1. Find the cross line (does not move if the sensors are already on it)
     ctx.qtr.readLineBlack(qtrSensorValues);
@@ -272,6 +273,8 @@ bool alignOnCrossLineAfterTurn(MissionContext &ctx)
             return false;
     }
     brakeDrive(ctx);
+    if (findOnly)
+        return true;
     if (!missionWait(150))
         return false;
 
@@ -328,13 +331,23 @@ bool turnAndShootAction(MissionContext &ctx)
     if (!missionWait(200))
         return false;
 
-    // Haus 3 row 1 on the middle cross line
-    if (!alignOnCrossLineAfterTurn(ctx))
-        return false;
-    if (!missionWait(200))
-        return false;
-    if (!shootPlannedShots(ctx, turnCheckpoint, true))
-        return false;
+    if (hasPlannedShots(turnCheckpoint, true))
+    {
+        // Haus 3 row 1 on the middle cross line
+        if (!alignOnCrossLineAfterTurn(ctx))
+            return false;
+        if (!missionWait(200))
+            return false;
+        if (!shootPlannedShots(ctx, turnCheckpoint, true))
+            return false;
+    }
+    else
+    {
+        // No shots after the turn (Haus 3 skipped): only make sure the sensors are on the middle cross line,
+        // so driving off it below keeps it from being counted. Then straight back to the finish.
+        if (!alignOnCrossLineAfterTurn(ctx, true))
+            return false;
+    }
 
     // Drive off the middle cross line so the line following does not count it
     return driveFromCrossLine(ctx, missionDriveSpeed, CrossLine::Leave, 0);

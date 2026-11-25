@@ -179,9 +179,11 @@ constexpr RowStop shotPlan[] = {
     {7, false, HouseMedium, 1, RowMove::Stay},
     {7, false, HouseMedium, 2, RowMove::TurnRight}, // stays on cross line 7, turns ~25 degrees towards row 3
     // Haus 3 (top line after the 180 turn, driving south): middle cross line right after the turn, then 8
-    {7, true, HouseFar, 0, RowMove::Stay},
-    {8, false, HouseFar, 1, RowMove::Stay},
-    {8, false, HouseFar, 2, RowMove::FollowLine},
+    // Currently skipped: after the 180 turn the robot drives straight back to the finish.
+    // Remove the // to shoot Haus 3 again.
+    // {7, true, HouseFar, 0, RowMove::Stay},
+    // {8, false, HouseFar, 1, RowMove::Stay},
+    // {8, false, HouseFar, 2, RowMove::FollowLine},
 };
 
 // RowMove::TurnRight: spin on the spot for this long (about 25 degrees - tune on the track), then turn back
