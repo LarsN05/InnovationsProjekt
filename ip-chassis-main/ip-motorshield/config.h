@@ -227,6 +227,11 @@ constexpr uint32_t distributionForwardExtraMs = 400;  // forward with the arm ex
 constexpr uint32_t distributionServoSettleMs = 500;   // time for the arm to move
 constexpr uint32_t distributionDropWaitMs = 1000;     // after driving forward: time for the cubes to fall
 constexpr uint32_t distributionReturnExtraMs = 200;   // back after the drop: until the cross line is reached again, then this long
+// Sideways shift towards the distribution center (it is on the LEFT): while backing off the cross line the robot
+// turns its nose a little to the right, reverses (which moves it to the left), then turns back parallel to the line.
+// Shift = back-off distance x sin(angle). Start: about 10 degrees -> roughly 1 cm. 0 = no shift.
+// More shift: larger distributionShiftTurnMs (or longer distributionBackOffExtraMs).
+constexpr uint32_t distributionShiftTurnMs = 120;     // turn on the spot for this long (about 12 ms per degree at rowTurnSpeed)
 constexpr uint32_t crossLineTimeoutMs = 2000;
 
 // Mission: drive moves

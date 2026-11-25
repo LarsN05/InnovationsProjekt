@@ -62,9 +62,9 @@ enum class CrossLine
 // Drives straight (negative speed = backwards) until the checkpoint cross line is reached or left,
 // then keeps going for extraMs and brakes. Returns false on Stop or if the cross line was not found in time.
 bool driveFromCrossLine(MissionContext &ctx, int speed, CrossLine edge, uint32_t extraMs,
-                        uint32_t timeoutMs = crossLineTimeoutMs)
+                        uint32_t timeoutMs = crossLineTimeoutMs, bool allowSteer = true)
 {
-    const bool steer = speed > 0;
+    const bool steer = allowSteer && speed > 0; // false = drive straight (keeps a sideways offset from the line)
     ctx.pid.reset();
     const uint32_t startMs = millis();
 
@@ -207,9 +207,24 @@ bool distributionCenterAction(MissionContext &ctx)
         return false;
     updateBatteryCompensation();
 
-    // 2. Back off the cross line
+    // 2. Back off the cross line and shift ~1 cm to the left (towards the distribution center):
+    //    nose a little to the right, reverse, turn back parallel to the line.
+    if (distributionShiftTurnMs > 0)
+    {
+        if (!turnOnSpotFor(ctx, rowTurnSpeed, distributionShiftTurnMs))
+            return false;
+        if (!missionWait(150))
+            return false;
+    }
     if (!driveFromCrossLine(ctx, -missionDriveSpeed, CrossLine::Leave, distributionBackOffExtraMs))
         return false;
+    if (distributionShiftTurnMs > 0)
+    {
+        if (!missionWait(150))
+            return false;
+        if (!turnOnSpotFor(ctx, -rowTurnSpeed, distributionShiftTurnMs))
+            return false;
+    }
 
     // 3. Extend the arm
     ShieldServo &arm = shield.servo(distributionServo);
@@ -218,8 +233,9 @@ bool distributionCenterAction(MissionContext &ctx)
     if (!missionWait(distributionServoSettleMs))
         return false;
 
-    // 4. Drive forward over the cross line with the arm extended: this triggers the distribution center
-    if (!driveFromCrossLine(ctx, missionDriveSpeed, CrossLine::Reach, distributionForwardExtraMs))
+    // 4. Drive forward over the cross line with the arm extended: this triggers the distribution center.
+    //    Straight, without line steering, so the robot keeps the sideways shift from step 2.
+    if (!driveFromCrossLine(ctx, missionDriveSpeed, CrossLine::Reach, distributionForwardExtraMs, crossLineTimeoutMs, false))
         return false;
     if (!missionWait(distributionDropWaitMs))
         return false;
