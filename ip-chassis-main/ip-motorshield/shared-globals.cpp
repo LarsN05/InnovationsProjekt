@@ -24,6 +24,7 @@ volatile bool testShotRequested = false;
 volatile bool testShotActive = false;
 volatile int testShotRpm = 0;
 volatile bool testShotRight = false;
+volatile int testShotCount = 1;
 bool brakeWhenStopped = false;
 
 bool enableSupplyAndM1M2CurrentMonitoring = false;

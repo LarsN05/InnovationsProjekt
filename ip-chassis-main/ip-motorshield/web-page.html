@@ -357,9 +357,11 @@
               <label style="align-self:center;"><input id="testShotRight" type="checkbox">right slide</label>
             </div>
             <div class="row">
+              <input id="testShotCount" type="number" min="1" max="20" step="1" value="1" style="width:70px;">
+              <label style="align-self:center;">shots</label>
               <button class="btn-success" style="flex:1;" onclick="sendTestShot()">Shoot</button>
             </div>
-            <div class="small">Only while stopped. Spins up, sets the switch, fires one cube, stops the shooter. Stop cancels it.</div>
+            <div class="small">Only while stopped. Spins up, sets the switch, fires the cubes back to back (shooter keeps spinning), then stops the shooter. Stop cancels it.</div>
           </div>
         </div>
 
@@ -643,8 +645,9 @@
       }
       const rpm = Math.max(0, Math.min(170, Math.round(Number($('testShotRpm').value) || 0)));
       const right = $('testShotRight').checked ? 1 : 0;
-      ws.send(`command=test_shot=${rpm},${right}`);
-      addMsg(`Sent command=test_shot=${rpm},${right}`);
+      const count = Math.max(1, Math.min(20, Math.round(Number($('testShotCount').value) || 1)));
+      ws.send(`command=test_shot=${rpm},${right},${count}`);
+      addMsg(`Sent command=test_shot=${rpm},${right},${count}`);
     }
 
     // Switch servo (Weiche): preset positions from config.h or a free angle to find the right values.

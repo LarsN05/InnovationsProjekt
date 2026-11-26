@@ -27,6 +27,7 @@ extern volatile bool testShotRequested;
 extern volatile bool testShotActive; // true while the test shot runs (missionWait does not abort it although robotMotionEnabled is false)
 extern volatile int testShotRpm;
 extern volatile bool testShotRight;
+extern volatile int testShotCount; // number of shots back to back
 extern bool brakeWhenStopped;
 
 // Supply rails and M1/M2 current monitoring (sampled in the web task).

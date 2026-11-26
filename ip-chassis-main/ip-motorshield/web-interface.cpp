@@ -399,10 +399,11 @@ void applyWebCommand(const char *payload, uint8_t clientNum)
         return;
     }
 
-    // Test shot: command=test_shot=<rpm>,<0 = left slide | 1 = right slide>. Only while the robot stands still.
+    // Test shots: command=test_shot=<rpm>,<0 = left slide | 1 = right slide>[,<count>]. Only while the robot stands still.
     int shotRpm = 0;
     int shotRight = 0;
-    if (sscanf(payload, "command=test_shot=%d,%d", &shotRpm, &shotRight) == 2)
+    int shotCount = 1;
+    if (sscanf(payload, "command=test_shot=%d,%d,%d", &shotRpm, &shotRight, &shotCount) >= 2)
     {
         const char *reply = "status=test_shot=started";
         if (robotMotionEnabled)
@@ -413,8 +414,9 @@ void applyWebCommand(const char *payload, uint8_t clientNum)
         {
             testShotRpm = shotRpm;
             testShotRight = shotRight != 0;
+            testShotCount = constrain(shotCount, 1, 20);
             testShotRequested = true; // loop() runs it
-            Serial.printf("Test shot requested: %d rpm, %s slide\n", shotRpm, shotRight ? "right" : "left");
+            Serial.printf("Test shots requested: %d x %d rpm, %s slide\n", testShotCount, shotRpm, shotRight ? "right" : "left");
         }
         webSocketServer.sendTXT(clientNum, reply);
         return;

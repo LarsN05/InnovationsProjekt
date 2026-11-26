@@ -239,11 +239,19 @@ void loop()
   {
     testShotRequested = false;
     testShotActive = true;
-    const bool shotOk = shootSequence(testShotRight, testShotRpm);
+    const int count = testShotCount;
+    int fired = 0;
+    for (int i = 0; i < count && testShotActive; ++i)
+    {
+      // the shooter keeps spinning between the shots, it stops after the last one
+      Serial.printf("Test shot %d/%d: %d rpm, %s slide\n", i + 1, count, testShotRpm, testShotRight ? "right" : "left");
+      if (shootSequence(testShotRight, testShotRpm, i == count - 1))
+        ++fired;
+    }
     const bool cancelled = !testShotActive;
     testShotActive = false;
     adjustSpeed(0);
-    Serial.printf("Test shot: %s\n", cancelled ? "cancelled" : (shotOk ? "done" : "failed (rpm too low or no package)"));
+    Serial.printf("Test shots %s: %d of %d fired\n", cancelled ? "cancelled" : "done", fired, count);
   }
 
 #if ENCODER_MOTOR_TEST_MODE
