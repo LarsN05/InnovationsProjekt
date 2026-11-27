@@ -3,11 +3,11 @@
 
 // Set to 1 to enable the WiFi web interface for live telemetry and remote control.
 // Set to 0 for standalone mode: the robot auto-starts after calibration with no WiFi.
-#define ENABLE_WEB_INTERFACE 1
+#define ENABLE_WEB_INTERFACE 0
 
 // Set to 1 to test the encoder motor: skips the sensor calibration and the line following,
 // the robot does not drive. Set the motor rpm live in the web interface ("Encoder motor test").
-#define ENCODER_MOTOR_TEST_MODE 1
+#define ENCODER_MOTOR_TEST_MODE 0
 
 // Set to 1 to test allignOnCheckpoint() alone: the robot follows the line normally, but at EVERY
 // cross line it only runs the alignment (no mission actions) and then stops. Results go to Serial.
