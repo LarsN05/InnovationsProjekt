@@ -205,15 +205,11 @@ constexpr uint32_t rowTurnMs = 80;
 constexpr int rowTurnSpeed = 900;
 
 // After the 180 turn: the robot drives forward (with line steering) until the sensors see the middle cross line.
-// Then it straightens: it follows the line forward past the cross line until it is parallel to the line
-// (line position stays in the middle within turnAlignStraightTolerance for turnAlignStraightStableMs while driving;
-// at an angle the position would drift). Then it backs straight onto the cross line and shoots Haus 3 row 1.
+// Then it aligns: forward past the cross line for turnAlignWiggleMs (straightens it on the line), and back
+// slowly until it is on the cross line again. Then it shoots Haus 3 row 1.
 constexpr uint32_t turnAlignSearchMs = 1500;     // finding the cross line: gives up after this long
-constexpr uint32_t turnAlignWiggleMs = 500;      // straightening: follows the line at least this long
-constexpr uint32_t turnAlignStraightMaxMs = 2000;    // straightening: at most this long (then it backs off anyway)
-constexpr int turnAlignStraightTolerance = 150;      // allowed line position error while parallel (0..4000, 1 sensor = 1000)
-constexpr uint32_t turnAlignStraightStableMs = 250;  // must stay within the tolerance this long
-constexpr uint32_t turnAlignBackTimeoutMs = 1500;    // extra time for backing onto the cross line
+constexpr uint32_t turnAlignWiggleMs = 500;      // forward part of the alignment
+constexpr uint32_t turnAlignBackTimeoutMs = 1500;
 constexpr int turnAlignSpeed = 700;
 
 // QTR alignment after the 180 turn
