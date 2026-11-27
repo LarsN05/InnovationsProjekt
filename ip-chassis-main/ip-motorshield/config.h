@@ -274,6 +274,14 @@ constexpr uint32_t distributionDropWaitMs = 1000;     // after driving forward: 
 // Shift = back-off distance x sin(angle). Start: about 20 degrees -> roughly 2 cm. 0 = no shift.
 // More shift: larger distributionShiftTurnMs (or longer distributionBackOffExtraMs).
 constexpr uint32_t distributionShiftTurnMs = 240;     // turn on the spot for this long (about 12 ms per degree at rowTurnSpeed)
+// Pickup pass (forward with the arm extended): the robot follows the line with an offset, so it arrives parallel
+// to the line and always with the same sideways offset. Line position setpoint: 0..4000, 2000 = middle,
+// small values = line under the RIGHT sensor (sensor 0), large values = line under the left sensor (sensor 4).
+// How to measure it: put the robot by hand exactly where it should pick up the packages, read "Sensor Error"
+// in the web interface, then distributionLineTarget = 2000 - Sensor Error.
+// Keep the line under the rightmost sensor with the next sensor just touching it (about 300..600), otherwise the
+// line is lost. 2000 = no offset. If the robot moves away from the distribution center, use 4000 - value.
+constexpr int distributionLineTarget = 400;
 constexpr uint32_t crossLineTimeoutMs = 2000;
 
 // Mission: drive moves

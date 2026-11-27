@@ -287,9 +287,46 @@ bool distributionCenterAction(MissionContext &ctx)
         return false;
 
     // 4. Drive forward over the cross line with the arm extended: this triggers the distribution center.
-    //    Straight, without line steering, so the robot keeps the sideways shift from step 2.
-    if (!driveFromCrossLine(ctx, missionDriveSpeed, CrossLine::Reach, distributionForwardExtraMs, crossLineTimeoutMs, false))
-        return false;
+    //    Line following with an offset (line under the right sensor, distributionLineTarget): the robot arrives
+    //    parallel to the line and always with the same sideways offset. On the cross line itself all sensors are
+    //    black, so the extra distance after it is driven straight.
+    {
+        const float normalTarget = ctx.pid.target;
+        ctx.pid.target = (float)distributionLineTarget;
+        ctx.pid.reset();
+        const uint32_t startMs = millis();
+        bool reached = false;
+        while (millis() - startMs < crossLineTimeoutMs)
+        {
+            driveStep(ctx, missionDriveSpeed, startMs, true);
+            if (lineStatus == STOP)
+            {
+                reached = true;
+                break;
+            }
+            if (!missionWait(5))
+            {
+                ctx.pid.target = normalTarget;
+                return false;
+            }
+        }
+        Serial.printf("Distribution: pickup pass %s, line error %d\n", reached ? "reached the cross line" : "cross line NOT found", pidError);
+        ctx.pid.target = normalTarget;
+        ctx.pid.reset();
+        if (!reached)
+        {
+            brakeDrive(ctx);
+            return false;
+        }
+        const uint32_t extraStartMs = millis();
+        while (millis() - extraStartMs < distributionForwardExtraMs)
+        {
+            driveStep(ctx, missionDriveSpeed, startMs, false);
+            if (!missionWait(5))
+                return false;
+        }
+        brakeDrive(ctx);
+    }
     if (!missionWait(distributionDropWaitMs))
         return false;
 
