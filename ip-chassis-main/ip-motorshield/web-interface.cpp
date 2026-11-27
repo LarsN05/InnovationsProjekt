@@ -10,6 +10,8 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WebServer.h>
+#include <ESPmDNS.h>
+#include <DNSServer.h>
 #include <WebSocketsServer.h>
 #include <esp_wifi.h>
 #include <cstring>
@@ -18,6 +20,7 @@
 namespace
 {
 WebServer webServer(80);
+DNSServer dnsServer; // answers <webHostName>.local for devices that ask the normal DNS (e.g. Android)
 WebSocketsServer webSocketServer(81);
 PIDController *activePid = nullptr;
 Motorshield *activeShield = nullptr;
@@ -565,6 +568,22 @@ void initWebInterface(PIDController &pid, Motorshield *shield)
 
     webServer.on("/", HTTP_GET, handleHome);
     webServer.begin();
+
+    // Name instead of IP: http://<webHostName>.local
+    // mDNS for Mac / iPhone / Windows / Linux, a small DNS server for devices that ask the AP's DNS instead.
+    char localName[48];
+    snprintf(localName, sizeof(localName), "%s.local", webHostName);
+    if (MDNS.begin(webHostName))
+    {
+        MDNS.addService("http", "tcp", 80);
+    }
+    else
+    {
+        Serial.println("mDNS start failed");
+    }
+    dnsServer.setErrorReplyCode(DNSReplyCode::NonExistentDomain);
+    dnsServer.start(53, localName, WiFi.softAPIP());
+    Serial.printf("Web interface: http://%s  (or http://%s)\n", localName, WiFi.softAPIP().toString().c_str());
 
     webSocketServer.begin();
     webSocketServer.onEvent(onWebSocketEvent);

@@ -20,6 +20,9 @@
 
 constexpr char accessPointNamePrefix[] = "IP-Motorshield";  // The WiFi SSID will be this prefix followed by the last 3 bytes of the MAC address, e.g. "IP-Motorshield-1A2B3C".
 constexpr char accessPointTeamName[] = "H09";  // Insert team name here, e.g. "TeamA"
+// Name of the web interface: open http://aleea.local instead of http://192.168.4.1 (the IP keeps working).
+// Lowercase letters, digits and '-' only (no special characters such as the reversed E: hostnames are ASCII).
+constexpr char webHostName[] = "aleea";
 constexpr char accessPointPassword[] = "dropzone9886";  // You should change the default password such that no other person can easily connect to your system and control it.
 
 // Keep the M1/M2 LEDC PWM aligned with the M3-M6 PCA9685 target frequency.
