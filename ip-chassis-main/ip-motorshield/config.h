@@ -186,8 +186,18 @@ constexpr RowStop shotPlan[] = {
     {8, false, HouseFar, 2, RowMove::FollowLine},
 };
 
-// RowMove::TurnRight: spin on the spot for this long (about 7 degrees - tune on the track), then turn back
-// the same time after the row. Right = the cannon (on the left side) swings towards the front.
+// RowMove::TurnRight (Haus 2 row 3 at cross line 7), measured with the line sensors instead of time:
+// 1. back off the cross line until only the main line is under the sensors (on the cross line all sensors are black)
+// 2. turn right in short pulses (centerTurnSpeed / centerPulseMs) until the line has moved rowTurnLineOffset
+//    from the middle of the sensor bar -> always the same angle, independent of battery and floor
+// 3. shoot, turn back in pulses until the line is centered again, drive forward onto cross line 7
+// Tuning: Serial prints "turnToLineOffset: reached offset ...". Larger rowTurnLineOffset = larger angle.
+// Position scale: 0..4000, one sensor = 1000. Estimate: about 1000 for 7 degrees.
+constexpr int rowTurnLineOffset = 1000;
+constexpr uint32_t rowTurnBackOffExtraMs = 100;   // back off: until the cross line is left, then this long
+constexpr uint32_t rowTurnTimeoutMs = 1500;       // pulse turn gives up after this time
+// Fallback (only if the robot cannot get off the cross line): time based turn on the spot.
+// Right = the cannon (on the left side) swings towards the front.
 constexpr uint32_t rowTurnMs = 80;
 constexpr int rowTurnSpeed = 900;
 

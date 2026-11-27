@@ -16,6 +16,9 @@ int compensateForBattery(int speed);                  // scales a speed by nomin
 bool perform180Turn(QTRSensors &qtr, Motor &motorL, Motor &motorR);
 // Turns on the spot in short pulses until the line is under the middle sensor. true = centered.
 bool centerOnLine(QTRSensors &qtr, Motor &motorL, Motor &motorR);
+// Turns on the spot in short pulses until the line position is targetOffset away from the middle of the sensor bar
+// (> 0 = turn right, the line moves to the left side; < 0 = turn left). true = reached, false = timeout/Stop.
+bool turnToLineOffset(QTRSensors &qtr, Motor &motorL, Motor &motorR, int targetOffset, uint32_t timeoutMs);
 // Drives (speed < 0 = backwards) until both outer sensors see the cross line; each wheel stops as soon as
 // the sensor on its side is on the line, so the robot ends square to the cross line. true = square.
 bool squareOnCrossLine(QTRSensors &qtr, Motor &motorL, Motor &motorR, int speed, uint32_t timeoutMs);

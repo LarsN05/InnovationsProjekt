@@ -130,6 +130,46 @@ bool followLineFor(MissionContext &ctx, int speed, uint32_t durationMs)
     return true;
 }
 
+// Small turn for a row (RowMove::TurnRight), measured with the line sensors (see rowTurnLineOffset in config.h).
+// rowTurnByLine remembers how the turn was made, so turnBackFromRow undoes it the same way.
+bool rowTurnByLine = false;
+
+bool turnForRow(MissionContext &ctx)
+{
+    // 1. Off the cross line backwards: on the cross line all sensors are black, the line position means nothing
+    const bool offCrossLine = driveFromCrossLine(ctx, -turnAlignSpeed, CrossLine::Leave, rowTurnBackOffExtraMs);
+    if (missionAborted())
+        return false;
+    rowTurnByLine = offCrossLine;
+    if (!offCrossLine)
+    {
+        Serial.println("Row turn: could not leave the cross line, time based turn instead");
+        return turnOnSpotFor(ctx, rowTurnSpeed, rowTurnMs) && missionWait(200);
+    }
+    if (!missionWait(150))
+        return false;
+    // 2. Turn right in pulses until the line is rowTurnLineOffset from the middle (a timeout keeps the angle reached)
+    turnToLineOffset(ctx.qtr, ctx.motorL, ctx.motorR, rowTurnLineOffset, rowTurnTimeoutMs);
+    if (missionAborted())
+        return false;
+    return missionWait(200);
+}
+
+bool turnBackFromRow(MissionContext &ctx)
+{
+    if (!rowTurnByLine)
+        return turnOnSpotFor(ctx, -rowTurnSpeed, rowTurnMs) && missionWait(200);
+    // turn back in pulses until the line is centered, then forward onto the cross line again
+    centerOnLine(ctx.qtr, ctx.motorL, ctx.motorR); // a centering timeout does not stop the run
+    if (missionAborted())
+        return false;
+    if (!missionWait(150))
+        return false;
+    if (!driveFromCrossLine(ctx, turnAlignSpeed, CrossLine::Reach, 0))
+        return false;
+    return missionWait(200);
+}
+
 // Fires every balcony row planned for this cross line (shotPlan in config.h), in order, and every shot
 // of each row (shots in config.h). Before a row the robot moves as given by its RowMove.
 // The shooter keeps spinning between the shots and rows of a house (also while driving to the next row).
@@ -158,9 +198,7 @@ bool shootPlannedShots(MissionContext &ctx, int checkpointNumber, bool afterTurn
         }
         else if (stop.move == RowMove::TurnRight)
         {
-            if (!turnOnSpotFor(ctx, rowTurnSpeed, rowTurnMs))
-                return false;
-            if (!missionWait(200))
+            if (!turnForRow(ctx))
                 return false;
         }
         // Shooter stays on after this row if the next row belongs to the same house; off between houses
@@ -182,10 +220,8 @@ bool shootPlannedShots(MissionContext &ctx, int checkpointNumber, bool afterTurn
         }
         if (stop.move == RowMove::TurnRight)
         {
-            // turn back to the line direction
-            if (!turnOnSpotFor(ctx, -rowTurnSpeed, rowTurnMs))
-                return false;
-            if (!missionWait(200))
+            // turn back to the line direction and onto the cross line
+            if (!turnBackFromRow(ctx))
                 return false;
         }
     }

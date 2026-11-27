@@ -163,6 +163,44 @@ bool centerOnLine(QTRSensors &qtr, Motor &motorL, Motor &motorR){
   return false;
 }
 
+bool turnToLineOffset(QTRSensors &qtr, Motor &motorL, Motor &motorR, int targetOffset, uint32_t timeoutMs){
+  uint16_t sensorValues[QTR_SENSOR_COUNT];
+  const int center = (QTR_SENSOR_COUNT - 1) * 500; // 2000 with 5 sensors
+  const bool turnRight = targetOffset > 0;         // turning right moves the line to the left side (larger position)
+  updateBatteryCompensation();
+  const int speed = compensateForBattery(centerTurnSpeed);
+  const uint32_t startMs = millis();
+  uint8_t reachedReads = 0;
+  int offset = 0;
+
+  while(millis() - startMs < timeoutMs){
+    offset = qtr.readLineBlack(sensorValues) - center;
+    const bool reached = turnRight ? offset >= targetOffset : offset <= targetOffset;
+    if(reached){
+      if(++reachedReads >= 2){
+        motorL.brake();
+        motorR.brake();
+        Serial.printf("turnToLineOffset: reached offset %d (target %d) after %lu ms\n", offset, targetOffset, millis() - startMs);
+        return true;
+      }
+      if(!missionWait(20)) return false;
+      continue;
+    }
+    reachedReads = 0;
+    //short pulse, then brake and let the robot settle before the next reading
+    motorL.setSpeed(turnRight ? speed : -speed);
+    motorR.setSpeed(turnRight ? -speed : speed);
+    if(!missionWait(centerPulseMs)) return false;
+    motorL.brake();
+    motorR.brake();
+    if(!missionWait(40)) return false;
+  }
+  motorL.brake();
+  motorR.brake();
+  Serial.printf("turnToLineOffset: timeout at offset %d (target %d)\n", offset, targetOffset);
+  return false;
+}
+
 bool squareOnCrossLine(QTRSensors &qtr, Motor &motorL, Motor &motorR, int speed, uint32_t timeoutMs){
   uint16_t sensorValues[QTR_SENSOR_COUNT];
   updateBatteryCompensation();
