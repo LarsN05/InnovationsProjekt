@@ -325,6 +325,26 @@ bool balconyShootAction(MissionContext &ctx)
     brakeDrive(ctx);
     if (!missionWait(200))
         return false;
+
+    // Slid past the cross line while braking (fast line following): back slowly onto it again.
+    // A timeout only means the robot shoots from where it is.
+    ctx.qtr.readLineBlack(qtrSensorValues);
+    updateLineStatus();
+    if (lineStatus != STOP)
+    {
+        const uint32_t startMs = millis();
+        while (lineStatus != STOP && millis() - startMs < balconyBackOntoLineTimeoutMs)
+        {
+            driveStep(ctx, -turnAlignSpeed, startMs, false);
+            if (!missionWait(5))
+                return false;
+        }
+        brakeDrive(ctx);
+        Serial.printf("Balcony: %s after %lu ms\n", lineStatus == STOP ? "back on the cross line" : "cross line not found again",
+                      millis() - startMs);
+        if (!missionWait(150))
+            return false;
+    }
     return shootPlannedShots(ctx, checkpointCounter, false);
 }
 

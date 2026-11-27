@@ -81,6 +81,14 @@ constexpr bool invertDriveMotors = false;  // set to true if the robot drives ba
 constexpr uint8_t revolverMotorNumber = 5;
 
 // Checkpoint detection (cross line = all 5 sensors black)
+// Line following speed between the checkpoints (PWM 0..4095, was 960). Only the normal line following uses it:
+// the distribution center, the turns, the alignments and the row 3 drive keep their own slower speeds.
+// Can also be changed live in the web interface ("Normal motor speed"). If the robot wobbles on the line at this
+// speed, lower P a little or raise D; if it misses cross lines, set checkpointConfirmReads to 1.
+constexpr int lineFollowSpeed = 1300;
+// At a balcony cross line the robot brakes at the faster speed and may slide past the line: it then backs
+// slowly onto the cross line again, so the shooting position stays the same as at the slow speed.
+constexpr uint32_t balconyBackOntoLineTimeoutMs = 800;
 constexpr uint8_t checkpointConfirmReads = 2;  // consecutive all-black drive-loop reads needed to count a checkpoint (2 x 25 ms at 40 Hz). Set to 1 if checkpoints are missed at high speed.
 constexpr uint32_t checkpointLockoutMs = 600;  // after a checkpoint, further cross lines are ignored for this long (filters double counts)
 

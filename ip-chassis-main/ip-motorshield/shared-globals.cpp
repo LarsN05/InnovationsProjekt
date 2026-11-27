@@ -1,4 +1,5 @@
 #include "shared-globals.h"
+#include "config.h"
 
 float pidControlKp = 0.32;
 float pidControlKi = 0.4;
@@ -6,7 +7,7 @@ float pidControlKd = 0.0;
 int pidError = 0;
 float controlSignal; // Variable zur Speicherung des Steuersignals für die Motoren.
 
-int defaultMotorSpeed = 960;
+int defaultMotorSpeed = lineFollowSpeed; // config.h
 int rightMotorSpeed = 0;
 int leftMotorSpeed = 0;
 bool enableMotorDeadzoneCompensation = false;
