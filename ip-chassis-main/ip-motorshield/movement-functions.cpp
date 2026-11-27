@@ -400,6 +400,8 @@ void printEncodedMotorDebug(){
 // Jam handling: no new cube within revolverJamMs -> brake, turn backwards briefly (frees a clamped cube),
 // then forwards again. After revolverMaxUnjamTries the shot is skipped (returns false).
 bool turnUntilPackage(){
+  static bool firstCubeDone = false; // the first cube after power-on needs longer: the revolver fills up first
+  const uint32_t jamMs = firstCubeDone ? revolverJamMs : revolverFirstCubeJamMs;
   Motor &revolver = shield.motor(revolverMotorNumber);
   Serial.printf("turnUntilPackage: start, barrier sensor %u us (threshold %u)\n", readBarrierSensor(), barrierThreshold);
   bool sensorWasFree = !barrierDetected();
@@ -418,7 +420,7 @@ bool turnUntilPackage(){
       sensorWasFree = true;
     }
     pakageDetected = sensorWasFree && blocked;
-    if(pakageDetected || millis() - segmentStartMs < revolverJamMs){
+    if(pakageDetected || millis() - segmentStartMs < jamMs){
       continue;
     }
     // no cube for revolverJamMs: jammed (or empty)
@@ -427,7 +429,7 @@ bool turnUntilPackage(){
     }
     ++unjamTries;
     Serial.printf("turnUntilPackage: no cube for %lu ms, revolver jammed? turning back (try %u/%u)\n",
-                  (unsigned long)revolverJamMs, unjamTries, revolverMaxUnjamTries);
+                  (unsigned long)jamMs, unjamTries, revolverMaxUnjamTries);
     revolver.brake();
     if(!missionWait(100)) return false;
     revolver.setSpeed(-revolverUnjamSpeed);
@@ -439,6 +441,9 @@ bool turnUntilPackage(){
     segmentStartMs = millis();
   }
   revolver.brake();
+  if(pakageDetected){
+    firstCubeDone = true;
+  }
   Serial.printf("turnUntilPackage: %s after %lu ms (%u unjam tries)\n",
                 pakageDetected ? "package detected" : "no package, gave up (jammed or empty)",
                 millis() - startMs, unjamTries);

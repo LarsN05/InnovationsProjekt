@@ -220,6 +220,7 @@ constexpr int revolverTurnSpeed = 1500;   // original value; max 4095
 // Normal time per cube: see "turnUntilPackage: package detected after ... ms" on Serial. Set revolverJamMs to
 // about 2x that time.
 constexpr uint32_t revolverJamMs = 2500;           // no cube for this long -> jammed
+constexpr uint32_t revolverFirstCubeJamMs = 8000;  // same for the very first cube after power-on: the revolver has to fill up first
 constexpr uint32_t revolverUnjamReverseMs = 300;   // turn backwards this long to free the cube
 constexpr int revolverUnjamSpeed = 2500;           // speed of the backwards turn (stronger than normal to break it loose)
 constexpr uint8_t revolverMaxUnjamTries = 3;       // after this many tries the shot is skipped
