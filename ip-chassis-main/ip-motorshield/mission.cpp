@@ -132,9 +132,8 @@ bool followLineFor(MissionContext &ctx, int speed, uint32_t durationMs)
 
 // Fires every balcony row planned for this cross line (shotPlan in config.h), in order, and every shot
 // of each row (shots in config.h). Before a row the robot moves as given by its RowMove.
-// The shooter keeps spinning between the shots of a row. After a row it stops whenever the robot drives on
-// (next cross line, line following before row 3, reversing and 180 turn); it only keeps spinning when the next
-// row is shot from the same spot (e.g. after the small turn on the spot at Haus 2).
+// The shooter keeps spinning between the shots and rows of a house (also while driving to the next row).
+// It only stops after the last row of a house, before the robot drives on to the next house.
 // A missed shot does not stop the run.
 bool shootPlannedShots(MissionContext &ctx, int checkpointNumber, bool afterTurn)
 {
@@ -164,10 +163,8 @@ bool shootPlannedShots(MissionContext &ctx, int checkpointNumber, bool afterTurn
             if (!missionWait(200))
                 return false;
         }
-        // Shooter stays on after this row only if the next row is fired from the same spot (no driving in between)
-        const bool nextRowSameSpot = (p + 1 < planLength) && shotPlan[p + 1].checkpoint == stop.checkpoint &&
-                                     shotPlan[p + 1].afterTurn == stop.afterTurn &&
-                                     shotPlan[p + 1].move != RowMove::FollowLine;
+        // Shooter stays on after this row if the next row belongs to the same house; off between houses
+        const bool nextRowSameHouse = (p + 1 < planLength) && shotPlan[p + 1].house == stop.house;
         // Shot order alternates from row to row (snake): 1st row of the run bottom -> top, 2nd row top -> bottom,
         // 3rd row bottom -> top again, ... across all houses.
         const bool topDown = (p % 2) == 1;
@@ -176,7 +173,7 @@ bool shootPlannedShots(MissionContext &ctx, int checkpointNumber, bool afterTurn
         {
             const int i = topDown ? count - 1 - n : n; // index in shots[] (0 = lowest balcony)
             const Shot &shot = shots[stop.house][stop.row][i];
-            const bool stopShooterAfter = (n == count - 1) && !nextRowSameSpot; // off before the robot drives
+            const bool stopShooterAfter = (n == count - 1) && !nextRowSameHouse; // off before the next house
             Serial.printf("Shot: Haus %d, row %d, shot %d: %d rpm, %s slide\n", stop.house + 1, stop.row + 1, i + 1,
                           shot.rpm, shot.switchRight ? "right" : "left");
             shootSequence(shot.switchRight, shot.rpm, stopShooterAfter);
