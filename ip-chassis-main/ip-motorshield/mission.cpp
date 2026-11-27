@@ -163,10 +163,16 @@ bool shootPlannedShots(MissionContext &ctx, int checkpointNumber, bool afterTurn
                 return false;
         }
         const bool lastRowOfRun = (p == planLength - 1);
-        for (int i = 0; i < shotsPerRow[stop.row]; ++i)
+        // Shot order alternates from row to row (snake): 1st row of the run bottom -> top, 2nd row top -> bottom,
+        // 3rd row bottom -> top again, ... across all houses. So the shooter never has to drop from top speed
+        // to the lowest rpm between two rows.
+        const bool topDown = (p % 2) == 1;
+        const int count = shotsPerRow[stop.row];
+        for (int n = 0; n < count; ++n)
         {
+            const int i = topDown ? count - 1 - n : n; // index in shots[] (0 = lowest balcony)
             const Shot &shot = shots[stop.house][stop.row][i];
-            const bool lastShotOfRun = lastRowOfRun && (i == shotsPerRow[stop.row] - 1);
+            const bool lastShotOfRun = lastRowOfRun && (n == count - 1);
             Serial.printf("Shot: Haus %d, row %d, shot %d: %d rpm, %s slide\n", stop.house + 1, stop.row + 1, i + 1,
                           shot.rpm, shot.switchRight ? "right" : "left");
             shootSequence(shot.switchRight, shot.rpm, lastShotOfRun);

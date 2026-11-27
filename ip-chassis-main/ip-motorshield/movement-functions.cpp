@@ -12,8 +12,6 @@ constexpr uint32_t turnTimeOutMs = 5000; //constant for the maximum time a turn 
 constexpr uint32_t allignementMs = 500; //constant for the allignement reversal time
 constexpr uint16_t reversalSpeed = 600; //speed for reversal
 constexpr uint32_t allignementTimeOutMs = 3000; // timout for reversal in allignOnCheckpoint
-constexpr uint32_t revolverTimeOutMs = 10000;
-constexpr uint32_t revolverBlockedTimeOutMs = 3000; // sensor already blocked at the start (package stuck): give up if it does not clear within this time
 constexpr float rpmAccuracy = 4; // allowed deviation from the target rpm
 constexpr uint32_t spinUpTimeOutMs = 10000; // maximum time for the motor to reach the target rpm
 constexpr uint32_t rpmStableMs = 300; // the rpm has to stay within rpmAccuracy for this long
@@ -397,32 +395,53 @@ void printEncodedMotorDebug(){
                 encodedMotorIntegral, digitalRead(ENCODER_A_PIN), digitalRead(ENCODER_B_PIN), loopHz);
 }
 
+// Turns the revolver until the next cube reaches the barrier sensor. A cube counts only when the sensor goes
+// from free to blocked, so a cube stuck at the sensor does not stop the revolver at once.
+// Jam handling: no new cube within revolverJamMs -> brake, turn backwards briefly (frees a clamped cube),
+// then forwards again. After revolverMaxUnjamTries the shot is skipped (returns false).
 bool turnUntilPackage(){
+  Motor &revolver = shield.motor(revolverMotorNumber);
   Serial.printf("turnUntilPackage: start, barrier sensor %u us (threshold %u)\n", readBarrierSensor(), barrierThreshold);
-  shield.motor(revolverMotorNumber).setSpeed(revolverTurnSpeed);
-  bool pakageDetected = false;
-  //a package counts only when the sensor goes from free to blocked: a package stuck at the sensor
-  //(sensor blocked from the start) must not stop the revolver immediately
   bool sensorWasFree = !barrierDetected();
   if(!sensorWasFree){
     Serial.println("turnUntilPackage: sensor blocked at the start (package stuck?), waiting until it clears");
   }
-  uint32_t startMs = millis();
-  while(!pakageDetected && millis() - startMs < revolverTimeOutMs){
+  revolver.setSpeed(revolverTurnSpeed);
+  const uint32_t startMs = millis();
+  uint32_t segmentStartMs = startMs; // start of the current forward turn
+  uint8_t unjamTries = 0;
+  bool pakageDetected = false;
+  while(!pakageDetected){
     if(!missionWait(5)) return false; // Stop pressed: abortMission() already braked the revolver
     const bool blocked = barrierDetected();
     if(!blocked){
       sensorWasFree = true;
     }
     pakageDetected = sensorWasFree && blocked;
-    if(!sensorWasFree && millis() - startMs >= revolverBlockedTimeOutMs){
-      break; // the stuck package did not clear: stop instead of turning for the full timeout
+    if(pakageDetected || millis() - segmentStartMs < revolverJamMs){
+      continue;
     }
+    // no cube for revolverJamMs: jammed (or empty)
+    if(unjamTries >= revolverMaxUnjamTries){
+      break;
+    }
+    ++unjamTries;
+    Serial.printf("turnUntilPackage: no cube for %lu ms, revolver jammed? turning back (try %u/%u)\n",
+                  (unsigned long)revolverJamMs, unjamTries, revolverMaxUnjamTries);
+    revolver.brake();
+    if(!missionWait(100)) return false;
+    revolver.setSpeed(-revolverUnjamSpeed);
+    if(!missionWait(revolverUnjamReverseMs)) return false;
+    revolver.brake();
+    if(!missionWait(150)) return false;
+    sensorWasFree = !barrierDetected(); // a cube now in front of the sensor only counts after it was free once
+    revolver.setSpeed(revolverTurnSpeed);
+    segmentStartMs = millis();
   }
-  shield.motor(revolverMotorNumber).brake();
-  Serial.printf("turnUntilPackage: %s after %lu ms\n",
-                pakageDetected ? "package detected" : (sensorWasFree ? "timeout" : "sensor still blocked (package stuck)"),
-                millis() - startMs);
+  revolver.brake();
+  Serial.printf("turnUntilPackage: %s after %lu ms (%u unjam tries)\n",
+                pakageDetected ? "package detected" : "no package, gave up (jammed or empty)",
+                millis() - startMs, unjamTries);
   encodedMotorDelay(200);
   return pakageDetected;
 }

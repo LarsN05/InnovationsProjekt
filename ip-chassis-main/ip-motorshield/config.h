@@ -87,7 +87,7 @@ constexpr uint32_t checkpointLockoutMs = 600;  // after a checkpoint, further cr
 // row 2 at its 3rd cross line, row 3 after following the line for thirdBalconyDriveMs (there is no 4th line).
 //  1      distribution center (DS)
 //  2-4    Haus 1: bottom line, robot drives east  -> row 1 at 3, row 2 at 4, row 3 at 4 + drive
-//  5-7    Haus 2: top line, robot drives north    -> row 1 at 6, row 2 at 7, row 3 at 7 after a ~10 degree
+//  5-7    Haus 2: top line, robot drives north    -> row 1 at 6, row 2 at 7, row 3 at 7 after a ~7 degree
 //         right turn on the spot (and back), then 180 degree turn. After the turn the sensors are on the middle
 //         cross line: the robot aligns on it and shoots Haus 3 row 1 there (inside the action, not counted).
 //  8      Haus 3: bottom cross line of the top line  -> row 2 at 8, row 3 at 8 + drive
@@ -118,7 +118,8 @@ struct Shot
     bool switchRight; // switch servo: true = right slide, false = left slide
 };
 
-// shots[house][row][shot]: fired in this order (shot 1 = lowest balcony). Placeholder rpm - tune every shot on the track.
+// shots[house][row][shot]: shot 1 = lowest balcony. Placeholder rpm - tune every shot on the track.
+// Firing order alternates per row (mission.cpp): 1st row of the run bottom -> top, 2nd row top -> bottom, and so on.
 // Row 2 shot 4 = top balcony of the middle row: uses the right slide.
 // Rows 1 and 3 fire only the first 3 shots; their 4th entry is unused.
 constexpr Shot shots[HouseCount][balconyRowCount][maxShotsPerRow] = {
@@ -152,7 +153,7 @@ constexpr int shotDriveSpeed = 800;
 // move: what the robot does before the row:
 //   Stay          shoot where the robot stands
 //   FollowLine    follow the line for thirdBalconyDriveMs
-//   TurnRight     turn right on the spot by about 10 degrees (rowTurnMs), shoot, turn back
+//   TurnRight     turn right on the spot by about 7 degrees (rowTurnMs), shoot, turn back
 enum class RowMove
 {
     Stay,
@@ -178,16 +179,16 @@ constexpr RowStop shotPlan[] = {
     // Put // in front of a house's lines to skip it (the 180 turn at cross line 7 still happens).
     {6, false, HouseMedium, 0, RowMove::Stay},
     {7, false, HouseMedium, 1, RowMove::Stay},
-    {7, false, HouseMedium, 2, RowMove::TurnRight}, // stays on cross line 7, turns ~10 degrees towards row 3
+    {7, false, HouseMedium, 2, RowMove::TurnRight}, // stays on cross line 7, turns ~7 degrees towards row 3
     // Haus 3 (top line after the 180 turn, driving south): middle cross line right after the turn, then 8
     {7, true, HouseFar, 0, RowMove::Stay},
     {8, false, HouseFar, 1, RowMove::Stay},
     {8, false, HouseFar, 2, RowMove::FollowLine},
 };
 
-// RowMove::TurnRight: spin on the spot for this long (about 10 degrees - tune on the track), then turn back
+// RowMove::TurnRight: spin on the spot for this long (about 7 degrees - tune on the track), then turn back
 // the same time after the row. Right = the cannon (on the left side) swings towards the front.
-constexpr uint32_t rowTurnMs = 120;
+constexpr uint32_t rowTurnMs = 80;
 constexpr int rowTurnSpeed = 900;
 
 // After the 180 turn: the robot drives forward (with line steering) until the sensors see the middle cross line.
@@ -214,6 +215,14 @@ constexpr uint8_t rightOuterSensor = 0;
 
 // Revolver (M5) speed while turning to the next cube
 constexpr int revolverTurnSpeed = 1500;   // original value; max 4095
+// Jammed revolver: if no cube reaches the barrier sensor within revolverJamMs (or a cube sits at the sensor and
+// does not clear), the revolver is taken as jammed: it turns backwards briefly to free the cube, then forwards again.
+// Normal time per cube: see "turnUntilPackage: package detected after ... ms" on Serial. Set revolverJamMs to
+// about 2x that time.
+constexpr uint32_t revolverJamMs = 2500;           // no cube for this long -> jammed
+constexpr uint32_t revolverUnjamReverseMs = 300;   // turn backwards this long to free the cube
+constexpr int revolverUnjamSpeed = 2500;           // speed of the backwards turn (stronger than normal to break it loose)
+constexpr uint8_t revolverMaxUnjamTries = 3;       // after this many tries the shot is skipped
 // After each shot the shooter keeps this rpm until the cube has left, then goes straight to the next shot's rpm.
 // The shooter only stops after the last shot of the run (keeps its momentum between rows and houses).
 constexpr uint32_t shotFollowThroughMs = 2000;
