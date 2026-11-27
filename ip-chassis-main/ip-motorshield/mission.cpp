@@ -357,15 +357,39 @@ bool alignOnCrossLineAfterTurn(MissionContext &ctx, bool findOnly = false)
     if (!missionWait(150))
         return false;
 
-    // 2. Forward past the cross line (line steering straightens the robot)
-    if (!followLineFor(ctx, turnAlignSpeed, turnAlignWiggleMs))
-        return false;
+    // 2. Forward past the cross line with line steering until the robot is parallel to the line:
+    //    the line stays in the middle of the sensor bar while driving (at an angle it would drift away)
+    ctx.pid.reset();
+    startMs = millis();
+    uint32_t straightSinceMs = 0; // 0 = not within the tolerance right now
+    bool straight = false;
+    while (millis() - startMs < turnAlignStraightMaxMs)
+    {
+        driveStep(ctx, turnAlignSpeed, startMs, true);
+        const bool centered = lineStatus != STOP && abs(pidError) <= turnAlignStraightTolerance;
+        if (!centered)
+            straightSinceMs = 0;
+        else if (straightSinceMs == 0)
+            straightSinceMs = millis();
+        if (straightSinceMs != 0 && millis() - straightSinceMs >= turnAlignStraightStableMs &&
+            millis() - startMs >= turnAlignWiggleMs)
+        {
+            straight = true;
+            break;
+        }
+        if (!missionWait(5))
+            return false;
+    }
+    const uint32_t forwardMs = millis() - startMs;
+    brakeDrive(ctx);
+    Serial.printf("Mission: after the turn %s after %lu ms (line error %d)\n",
+                  straight ? "parallel to the line" : "NOT parallel (time limit)", (unsigned long)forwardMs, pidError);
     if (!missionWait(150))
         return false;
 
     // 3. Back slowly onto the cross line; each wheel stops when the outer sensor on its side sees the line,
-    //    so the robot ends square to the cross line
-    const bool square = squareOnCrossLine(ctx.qtr, ctx.motorL, ctx.motorR, -turnAlignSpeed, turnAlignBackTimeoutMs);
+    //    so the robot ends square to the cross line. Backing is straight, so the heading from step 2 is kept.
+    const bool square = squareOnCrossLine(ctx.qtr, ctx.motorL, ctx.motorR, -turnAlignSpeed, forwardMs + turnAlignBackTimeoutMs);
     brakeDrive(ctx);
     if (missionAborted())
         return false;
